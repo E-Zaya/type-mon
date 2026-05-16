@@ -46,9 +46,9 @@ function HomeInner() {
         transition-colors duration-200
       "
     >
-      <div className="mx-auto w-full max-w-6xl px-5 md:px-8 py-10 md:py-16">
+      <div className="mx-auto w-full max-w-6xl px-5 md:px-8 py-7 md:py-10">
         {/* Logo / header */}
-        <header className="mb-10 md:mb-14">
+        <header className="mb-7 md:mb-9">
           <div className="flex items-center justify-between">
             <h1 className="font-light tracking-tight text-2xl">
               Type<span className="text-[#1D9E75]">Mon</span>
@@ -61,7 +61,7 @@ function HomeInner() {
             </div>
           </div>
 
-          <div className="mt-6 md:mt-8 max-w-xl">
+          <div className="mt-4 md:mt-5 max-w-xl">
             <h2 className="text-2xl md:text-3xl font-light tracking-tight text-black dark:text-white leading-tight">
               Латинаар бичиж, Кириллээр илгээ.
             </h2>
@@ -74,13 +74,13 @@ function HomeInner() {
         </header>
 
         {/* Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 lg:gap-10">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 lg:gap-9">
           <section
             className="
               bg-[#eeede8] dark:bg-[#242424]
               border border-black/8 dark:border-white/10
               rounded-2xl
-              p-5 md:p-7
+              p-4 md:p-6
               backdrop-blur-sm
               transition-colors duration-200
             "
@@ -103,7 +103,7 @@ function HomeInner() {
           </section>
         </div>
 
-        <footer className="mt-12 md:mt-16 text-xs text-black/50 dark:text-white/50 text-center">
+        <footer className="mt-9 md:mt-12 text-xs text-black/50 dark:text-white/50 text-center">
           Латинаар бичээд дассан Монголчуудад зориулав ·{" "}
           <span className="text-black/70 dark:text-white/70">TypeMon</span>
         </footer>

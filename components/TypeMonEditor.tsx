@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { transliterate, transliterateSegments } from "@/lib/transliterate";
+import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
 import SettingsModal from "@/components/SettingsModal";
 
@@ -209,14 +209,7 @@ export default function TypeMonEditor({
   const modKey = mac ? "⌘" : "Ctrl";
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Stat row */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="ҮСЭГ" value={charCount} />
-        <StatCard label="ҮГ" value={wordCount} />
-        <StatCard label="ҮГ/МИН" value={wpm} />
-      </div>
-
+    <div className="flex flex-col gap-4 md:gap-5">
       {/* Editor grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Romanized input */}
@@ -292,6 +285,7 @@ export default function TypeMonEditor({
               onClick={handleCopy}
               disabled={!cyrillic}
               className="
+                hidden md:block
                 absolute top-3 right-3
                 opacity-0 group-hover:opacity-100 focus:opacity-100
                 bg-white/80 dark:bg-black/60
@@ -368,6 +362,23 @@ export default function TypeMonEditor({
         >
           {saved ? "Saved ✓" : "Save"}
         </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          disabled={!cyrillic}
+          className="
+            md:hidden flex-1 min-w-[150px]
+            bg-[#1D9E75] hover:bg-[#178b66]
+            border border-[#1D9E75]/70
+            rounded-lg text-sm px-4 py-2
+            text-white
+            transition-all duration-150
+            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:hover:bg-[#1D9E75]
+          "
+        >
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
 
         {/* Shortcut legend (right-aligned on wider screens) */}
         <div className="hidden sm:flex items-center gap-3 ml-auto text-black/50 dark:text-white/50 text-[11px]">
@@ -377,26 +388,25 @@ export default function TypeMonEditor({
         </div>
       </div>
 
+      {/* Secondary stats */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-black/50 dark:text-white/50">
+        <StatPill label="ҮСЭГ" value={charCount} />
+        <StatPill label="ҮГ" value={wordCount} />
+        <StatPill label="ҮГ/МИН" value={wpm} />
+      </div>
+
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatPill({ label, value }: { label: string; value: number }) {
   return (
-    <div
-      className="
-        bg-black/5 dark:bg-white/5
-        border border-black/5 dark:border-white/5
-        rounded-lg px-3 py-2
-      "
-    >
-      <div className="text-[11px] text-black/50 dark:text-white/50 uppercase tracking-widest">
-        {label}
-      </div>
-      <div className="text-lg font-medium text-black dark:text-white tabular-nums">{value}</div>
-    </div>
+    <span className="inline-flex items-center gap-1.5 uppercase tracking-widest">
+      <span>{label}</span>
+      <span className="font-mono text-black/70 dark:text-white/70 tabular-nums">{value}</span>
+    </span>
   );
 }
 
