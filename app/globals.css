@@ -1,26 +1,82 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode in Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light mode defaults (Claude.ai-ish) */
+  --background: #f5f4ef;
+  --card: #eeede8;
+  --card-strong: #e7e6e0;
+  --foreground: #1a1a1a;
+  --foreground-muted: rgba(26, 26, 26, 0.6);
+  --border-color: rgba(0, 0, 0, 0.08);
+  --accent: #1D9E75;
+
+  /* Stack with strong Cyrillic coverage. Geist often lacks Ү (U+04AE), Ө (U+04E8), Ъ (U+042A). */
+  --font-cyrillic:
+    "Inter", "Segoe UI", "Helvetica Neue", "Noto Sans", "Arial",
+    "Apple Color Emoji", sans-serif;
+}
+
+.dark {
+  --background: #1a1a1a;
+  --card: #242424;
+  --card-strong: #262626;
+  --foreground: #ededed;
+  --foreground-muted: rgba(237, 237, 237, 0.6);
+  --border-color: rgba(255, 255, 255, 0.1);
+  --accent: #1D9E75;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Cyrillic-friendly fallbacks come BEFORE Geist so Mongolian glyphs render correctly. */
+  font-family:
+    var(--font-geist-sans), "Inter", "Segoe UI", "Helvetica Neue",
+    "Noto Sans", "Arial", sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Utility: force the Cyrillic-friendly stack regardless of inherited font. */
+.font-cyrillic {
+  font-family: var(--font-cyrillic);
+}
+
+/* Custom scrollbar for textareas (light + dark aware) */
+textarea::-webkit-scrollbar,
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+textarea::-webkit-scrollbar-track,
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+textarea::-webkit-scrollbar-thumb,
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 3px;
+}
+.dark textarea::-webkit-scrollbar-thumb,
+.dark .scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+textarea::-webkit-scrollbar-thumb:hover,
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+}
+.dark textarea::-webkit-scrollbar-thumb:hover,
+.dark .scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
