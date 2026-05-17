@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
@@ -78,6 +85,23 @@ function isMac(): boolean {
   return /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
 }
 
+function subscribeOnline(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function getOnlineSnapshot(): boolean {
+  return typeof navigator === "undefined" ? true : navigator.onLine;
+}
+
+function getServerOnlineSnapshot(): boolean {
+  return true;
+}
+
 export default function TypeMonEditor({
   initialRoman = "",
   loadToken = 0,
@@ -94,6 +118,11 @@ export default function TypeMonEditor({
   const [polishCopied, setPolishCopied] = useState(false);
   const [polishApplied, setPolishApplied] = useState(false);
   const [polishShowChanges, setPolishShowChanges] = useState(false);
+  const online = useSyncExternalStore(
+    subscribeOnline,
+    getOnlineSnapshot,
+    getServerOnlineSnapshot
+  );
   // null means "not yet hydrated from localStorage" — we render a neutral
   // placeholder during SSR to avoid hydration mismatches.
   const [polishRemaining, setPolishRemaining] = useState<number | null>(null);
@@ -186,6 +215,14 @@ export default function TypeMonEditor({
   }, []);
 
   const handlePolish = useCallback(async () => {
+    if (!online) {
+      setPolish({
+        kind: "error",
+        message: "Интернетгүй үед AI засвар ажиллахгүй. Үндсэн хөрвүүлэлт офлайнаар ажиллана.",
+      });
+      return;
+    }
+
     const source = cyrillic.trim();
     if (!source) return;
     if (source.length > POLISH_MAX_CHARS) {
@@ -274,7 +311,7 @@ export default function TypeMonEditor({
         message: "Сүлжээний алдаа гарлаа. Дахин оролдоно уу.",
       });
     }
-  }, [cyrillic, polish, polishRemaining]);
+  }, [cyrillic, online, polish, polishRemaining]);
 
   const handlePolishedCopy = useCallback(async () => {
     if (polish.kind !== "done") return;
@@ -435,11 +472,14 @@ export default function TypeMonEditor({
               onClick={handlePolish}
               disabled={
                 !cyrillic ||
+                !online ||
                 polish.kind === "loading" ||
                 (polishRemaining !== null && polishRemaining <= 0)
               }
               title={
-                polishRemaining !== null
+                !online
+                  ? "Интернетгүй үед AI засвар ажиллахгүй"
+                  : polishRemaining !== null
                   ? `AI-аар засах · Өдөрт ${polishRemaining}/${POLISH_DAILY_LIMIT} үлдсэн (${modKey}+⇧+P)`
                   : `AI-аар засах (${modKey}+⇧+P)`
               }
@@ -631,6 +671,7 @@ export default function TypeMonEditor({
         onClick={handlePolish}
         disabled={
           !cyrillic ||
+          !online ||
           polish.kind === "loading" ||
           (polishRemaining !== null && polishRemaining <= 0)
         }

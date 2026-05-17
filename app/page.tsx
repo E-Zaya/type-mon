@@ -54,9 +54,6 @@ function HomeInner() {
               Type<span className="text-[#1D9E75]">Mon</span>
             </h1>
             <div className="flex items-center gap-3">
-              <p className="hidden sm:block text-xs text-black/60 dark:text-white/60">
-                Латин үсгээр бичээд Кирилл болго
-              </p>
               <ThemeToggle />
             </div>
           </div>
