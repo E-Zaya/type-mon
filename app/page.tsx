@@ -104,8 +104,15 @@ function HomeInner() {
         </div>
 
         <footer className="mt-9 md:mt-12 text-xs text-black/50 dark:text-white/50 text-center">
-          Латинаар бичээд дассан Монголчуудад зориулав ·{" "}
-          <span className="text-black/70 dark:text-white/70">TypeMon</span>
+          Латинаар бичээд дассан Монголчуудад зориулав · Built by{" "}
+          <a
+            href="https://www.ezaya.dev/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-black/70 hover:text-[#1D9E75] dark:text-white/70 dark:hover:text-[#1D9E75] transition-colors duration-150"
+          >
+            Zaya
+          </a>
         </footer>
       </div>
     </main>

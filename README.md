@@ -18,6 +18,34 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## AI Polish (`/api/polish`)
+
+The "Засах" button sends the transliterated Cyrillic text to Gemini for a
+light edit (typos, grammar, particle agreement) without changing meaning.
+
+### Environment variables
+
+Copy `.env.local.example` to `.env.local` and fill it in:
+
+```
+GEMINI_API_KEY=...               # https://aistudio.google.com/apikey
+UPSTASH_REDIS_REST_URL=...       # https://console.upstash.com/
+UPSTASH_REDIS_REST_TOKEN=...
+```
+
+In local dev the Upstash vars can be left blank — the API "fails open" and
+relies on the client-side localStorage quota. In production both MUST be set;
+otherwise `/api/polish` returns 500 `NOT_CONFIGURED` to prevent burning the
+Gemini free tier.
+
+### Limits
+
+- 500 characters per request (server + client enforced)
+- 10 requests / IP / 24h sliding window (server, via Upstash)
+- 10 requests / browser / day (client, via localStorage — UX only)
+
+Constants live in `lib/polish-prompt.ts`.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

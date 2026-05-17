@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Props = {
@@ -65,34 +66,104 @@ const SPECIAL: Array<[string, string]> = [
 ];
 
 export default function SettingsModal({ open, onClose }: Props) {
-  // Close on Esc
+  const mounted = useClientMounted();
+  const titleId = useId();
+  const sheetRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  // Close on Esc and keep keyboard focus inside the popup while it is open.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (e.key !== "Tab") return;
+      const sheet = sheetRef.current;
+      if (!sheet) return;
+
+      const focusable = Array.from(
+        sheet.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Lock body scroll while modal is open
+  // Mobile-safe body lock: preserve the current scroll position instead of
+  // relying on overflow alone, which is brittle on small touch viewports.
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const scrollY = window.scrollY;
+    const { body } = document;
+    const previous = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      overflow: body.style.overflow,
+    };
+
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+
+    requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+
     return () => {
-      document.body.style.overflow = prev;
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.left = previous.left;
+      body.style.right = previous.right;
+      body.style.width = previous.width;
+      body.style.overflow = previous.overflow;
+      window.scrollTo(0, scrollY);
+      requestAnimationFrame(() => {
+        returnFocusRef.current?.focus();
+        returnFocusRef.current = null;
+      });
     };
   }, [open]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
           className="
             fixed inset-0 z-50
-            flex items-center justify-center
-            p-4
+            flex items-end justify-center
+            md:items-center
           "
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -106,35 +177,48 @@ export default function SettingsModal({ open, onClose }: Props) {
             onClick={onClose}
             className="
               absolute inset-0
-              bg-black/30 dark:bg-black/60
-              backdrop-blur-sm
+              bg-black/35 dark:bg-black/65
+              backdrop-blur-[2px]
             "
           />
 
-          {/* Panel */}
-          <motion.div
+          {/* Bottom sheet on phones, dialog panel on wider screens. */}
+          <motion.section
+            ref={sheetRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Тохиргоо"
-            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+            aria-labelledby={titleId}
+            initial={{ opacity: 0, y: 28, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.98 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
+            exit={{ opacity: 0, y: 28, scale: 0.99 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
             className="
               relative z-10
-              w-full max-w-2xl max-h-[85vh]
-              overflow-y-auto scroll-thin
+              flex w-full max-w-2xl flex-col
+              max-h-[min(88dvh,720px)]
+              md:max-h-[min(86dvh,760px)]
               bg-[#eeede8] dark:bg-[#242424]
               border border-black/10 dark:border-white/10
-              rounded-2xl
+              rounded-t-lg md:rounded-lg
               shadow-2xl
+              overflow-hidden
             "
           >
-            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-[#eeede8]/95 dark:bg-[#242424]/95 backdrop-blur-sm border-b border-black/10 dark:border-white/10">
-              <h2 className="text-lg font-light tracking-tight text-black dark:text-white">
+            <div className="flex items-center justify-between px-5 py-4 bg-[#eeede8]/95 dark:bg-[#242424]/95 backdrop-blur-sm border-b border-black/10 dark:border-white/10 md:px-6">
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-1 w-10 rounded-full bg-black/20 dark:bg-white/20 md:hidden"
+                  aria-hidden
+                />
+                <h2
+                  id={titleId}
+                  className="text-lg font-light tracking-tight text-black dark:text-white"
+                >
                 Тохиргоо
-              </h2>
+                </h2>
+              </div>
               <button
+                ref={closeButtonRef}
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
@@ -150,7 +234,13 @@ export default function SettingsModal({ open, onClose }: Props) {
               </button>
             </div>
 
-            <div className="px-6 py-5 flex flex-col gap-6">
+            <div
+              className="
+                flex flex-col gap-6 overflow-y-auto scroll-thin
+                px-5 py-5 md:px-6
+                pb-[calc(1.25rem+env(safe-area-inset-bottom))]
+              "
+            >
               {/* Alphabet section */}
               <section>
                 <h3 className="text-[11px] text-black/60 dark:text-white/60 uppercase tracking-widest mb-3">
@@ -236,10 +326,19 @@ export default function SettingsModal({ open, onClose }: Props) {
                 </div>
               </section>
             </div>
-          </motion.div>
+          </motion.section>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
+  );
+}
+
+function useClientMounted() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
   );
 }
 

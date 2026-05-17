@@ -5,9 +5,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
 import SettingsModal from "@/components/SettingsModal";
+import { POLISH_DAILY_LIMIT, POLISH_MAX_CHARS } from "@/lib/polish-prompt";
+import {
+  getRemainingPolishes,
+  markQuotaExhausted,
+  recordPolishUsed,
+  syncRemainingFromServer,
+} from "@/lib/polish-quota";
 
 const HISTORY_KEY = "typemon-history";
 const HISTORY_MAX = 5;
+
+type PolishStatus =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "done"; text: string }
+  | { kind: "error"; message: string };
 
 type Props = {
   /** Optional ref-like setter so HistoryPanel (or parent) can push values into the editor. */
@@ -66,12 +79,19 @@ export default function TypeMonEditor({
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [mac, setMac] = useState(false);
+  const [polish, setPolish] = useState<PolishStatus>({ kind: "idle" });
+  const [polishCopied, setPolishCopied] = useState(false);
+  // null means "not yet hydrated from localStorage" — we render a neutral
+  // placeholder during SSR to avoid hydration mismatches.
+  const [polishRemaining, setPolishRemaining] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const polishCopyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMac(isMac());
+    setPolishRemaining(getRemainingPolishes());
   }, []);
 
   // Sync from parent when loadToken bumps
@@ -79,6 +99,7 @@ export default function TypeMonEditor({
     setInput(initialRoman);
     setStartedAt(null);
     setElapsedSec(0);
+    setPolish({ kind: "idle" });
     requestAnimationFrame(() => textareaRef.current?.focus());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadToken]);
@@ -113,6 +134,8 @@ export default function TypeMonEditor({
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const next = e.target.value;
       setInput(next);
+      // Any edit invalidates the previous polished result.
+      setPolish((p) => (p.kind === "idle" ? p : { kind: "idle" }));
       if (next.length > 0 && startedAt === null) {
         setStartedAt(Date.now());
       } else if (next.length === 0) {
@@ -139,8 +162,96 @@ export default function TypeMonEditor({
     setInput("");
     setStartedAt(null);
     setElapsedSec(0);
+    setPolish({ kind: "idle" });
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
+
+  const handlePolish = useCallback(async () => {
+    const source = cyrillic.trim();
+    if (!source) return;
+    if (source.length > POLISH_MAX_CHARS) {
+      setPolish({
+        kind: "error",
+        message: `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`,
+      });
+      return;
+    }
+    if (polishRemaining !== null && polishRemaining <= 0) {
+      setPolish({
+        kind: "error",
+        message: "Өнөөдрийн хязгаар дууссан. Маргааш дахин оролдоно уу.",
+      });
+      return;
+    }
+
+    setPolish({ kind: "loading" });
+    try {
+      const res = await fetch("/api/polish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: source }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | {
+            ok: boolean;
+            polished?: string;
+            remaining?: number | null;
+            error?: string;
+          }
+        | null;
+
+      if (res.status === 429) {
+        markQuotaExhausted();
+        setPolishRemaining(0);
+        setPolish({
+          kind: "error",
+          message: "Өнөөдрийн хязгаар дууссан. Маргааш дахин оролдоно уу.",
+        });
+        return;
+      }
+
+      if (!res.ok || !data?.ok || !data.polished) {
+        const code = data?.error ?? "UPSTREAM_ERROR";
+        const message =
+          code === "TOO_LONG"
+            ? `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`
+            : code === "NOT_CONFIGURED"
+            ? "Үйлчилгээ тохируулагдаагүй байна."
+            : "Алдаа гарлаа. Дахин оролдоно уу.";
+        setPolish({ kind: "error", message });
+        return;
+      }
+
+      // Prefer the server's authoritative remaining count; fall back to
+      // local increment when the server didn't include one (dev mode).
+      if (typeof data.remaining === "number") {
+        syncRemainingFromServer(data.remaining);
+        setPolishRemaining(getRemainingPolishes());
+      } else {
+        setPolishRemaining(recordPolishUsed());
+      }
+
+      setPolish({ kind: "done", text: data.polished });
+    } catch {
+      setPolish({
+        kind: "error",
+        message: "Сүлжээний алдаа гарлаа. Дахин оролдоно уу.",
+      });
+    }
+  }, [cyrillic, polishRemaining]);
+
+  const handlePolishedCopy = useCallback(async () => {
+    if (polish.kind !== "done") return;
+    try {
+      await navigator.clipboard.writeText(polish.text);
+      setPolishCopied(true);
+      if (polishCopyTimeoutRef.current) clearTimeout(polishCopyTimeoutRef.current);
+      polishCopyTimeoutRef.current = setTimeout(() => setPolishCopied(false), 2000);
+    } catch {
+      /* swallow */
+    }
+  }, [polish]);
 
   const handleSave = useCallback(() => {
     const roman = input.trim();
@@ -202,6 +313,7 @@ export default function TypeMonEditor({
     return () => {
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (polishCopyTimeoutRef.current) clearTimeout(polishCopyTimeoutRef.current);
     };
   }, []);
 
@@ -380,6 +492,41 @@ export default function TypeMonEditor({
           {copied ? "Copied ✓" : "Copy"}
         </button>
 
+        {/* AI Polish button — separate visual treatment so it reads as "extra" */}
+        <button
+          type="button"
+          onClick={handlePolish}
+          disabled={
+            !cyrillic ||
+            polish.kind === "loading" ||
+            (polishRemaining !== null && polishRemaining <= 0)
+          }
+          title={
+            polishRemaining !== null
+              ? `AI магадлан засна (өнөөдөр ${polishRemaining}/${POLISH_DAILY_LIMIT} үлдсэн)`
+              : "AI магадлан засна"
+          }
+          className="
+            inline-flex items-center gap-1.5
+            min-h-[36px] md:min-h-0
+            bg-transparent hover:bg-[#1D9E75]/10
+            border border-[#1D9E75]/60 hover:border-[#1D9E75]
+            rounded-lg text-sm px-3 py-1.5
+            text-[#1D9E75]
+            transition-all duration-150
+            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:hover:bg-transparent disabled:hover:border-[#1D9E75]/60
+          "
+        >
+          <SparkleIcon spinning={polish.kind === "loading"} />
+          <span>{polish.kind === "loading" ? "Засаж байна…" : "Засах"}</span>
+          {polishRemaining !== null && (
+            <span className="ml-1 text-[10px] tabular-nums opacity-70">
+              {polishRemaining}/{POLISH_DAILY_LIMIT}
+            </span>
+          )}
+        </button>
+
         {/* Shortcut legend (right-aligned on wider screens) */}
         <div className="hidden sm:flex items-center gap-3 ml-auto text-black/50 dark:text-white/50 text-[11px]">
           <ShortcutChip keys={[modKey, "K"]} desc="Clear" />
@@ -395,6 +542,62 @@ export default function TypeMonEditor({
         <StatPill label="ҮГ/МИН" value={wpm} />
       </div>
 
+      {/* Polish result panel — only shown when there's something to show */}
+      <AnimatePresence initial={false}>
+        {polish.kind !== "idle" && (
+          <motion.div
+            key={polish.kind}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="
+              relative
+              bg-[#1D9E75]/5 dark:bg-[#1D9E75]/10
+              border border-[#1D9E75]/30 dark:border-[#1D9E75]/40
+              rounded-xl p-4
+            "
+          >
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[11px] text-[#1D9E75] uppercase tracking-widest font-medium">
+                AI ЗАСВАР
+              </label>
+              {polish.kind === "done" && (
+                <button
+                  type="button"
+                  onClick={handlePolishedCopy}
+                  className="
+                    text-[11px] px-2 py-1 rounded-md
+                    bg-white/60 dark:bg-black/30
+                    border border-black/10 dark:border-white/10
+                    text-black/70 hover:text-black
+                    dark:text-white/70 dark:hover:text-white
+                    transition-colors duration-150
+                  "
+                >
+                  {polishCopied ? "Хууллаа ✓" : "Хуулах"}
+                </button>
+              )}
+            </div>
+            {polish.kind === "loading" && (
+              <p className="text-sm text-black/60 dark:text-white/60">
+                AI магадлан засаж байна…
+              </p>
+            )}
+            {polish.kind === "done" && (
+              <p className="text-base leading-relaxed text-black/90 dark:text-white/90 whitespace-pre-wrap break-words">
+                {polish.text}
+              </p>
+            )}
+            {polish.kind === "error" && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {polish.message}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
@@ -407,6 +610,25 @@ function StatPill({ label, value }: { label: string; value: number }) {
       <span>{label}</span>
       <span className="font-mono text-black/70 dark:text-white/70 tabular-nums">{value}</span>
     </span>
+  );
+}
+
+function SparkleIcon({ spinning = false }: { spinning?: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={spinning ? "animate-spin" : undefined}
+    >
+      <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+    </svg>
   );
 }
 
