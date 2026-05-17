@@ -10,6 +10,9 @@ export type HistoryItem = {
   id: string;
   roman: string;
   cyrillic: string;
+  /** Optional AI-polished version. Saved when the user clicks "Хэрэглэх"
+   * on the polish panel. Older history items don't have this field. */
+  polished?: string;
   createdAt: number;
 };
 
@@ -136,6 +139,18 @@ export default function HistoryPanel({ onLoad }: Props) {
                 <div className="text-black/90 dark:text-white/90 text-sm truncate mt-0.5">
                   {item.cyrillic}
                 </div>
+                {item.polished && item.polished !== item.cyrillic && (
+                  <div
+                    className="
+                      flex items-center gap-1.5 mt-1
+                      text-[#1D9E75] text-xs truncate
+                    "
+                    title={item.polished}
+                  >
+                    <span className="text-[10px] opacity-70">✦</span>
+                    <span className="truncate">{item.polished}</span>
+                  </div>
+                )}
 
                 {/* Hover actions */}
                 <div

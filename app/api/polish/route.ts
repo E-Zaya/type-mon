@@ -18,13 +18,14 @@
  *   resulting text and a remaining-count.
  */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import {
   POLISH_MAX_CHARS,
   POLISH_MODEL,
   POLISH_SYSTEM_PROMPT,
   buildPolishUserPrompt,
   cleanPolishedOutput,
+  type PolishResult,
 } from "@/lib/polish-prompt";
 import { getClientIdentifier, getPolishLimiter } from "@/lib/ratelimit";
 
@@ -114,15 +115,55 @@ export async function POST(request: Request): Promise<Response> {
       generationConfig: {
         // Low temperature → stable, conservative corrections.
         temperature: 0.3,
-        // Cap output to ~2x input so a runaway model can't blow past the limit.
-        maxOutputTokens: 1024,
+        // Generous cap so the "changes" array isn't truncated. Lite model
+        // is cheap enough that this isn't a cost concern.
+        maxOutputTokens: 2048,
+        // Force structured JSON output — eliminates "model added prose"
+        // bugs and lets us parse with JSON.parse.
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            polished: { type: SchemaType.STRING },
+            changes: {
+              type: SchemaType.ARRAY,
+              items: {
+                type: SchemaType.OBJECT,
+                properties: {
+                  before: { type: SchemaType.STRING },
+                  after: { type: SchemaType.STRING },
+                  reason: { type: SchemaType.STRING },
+                },
+                required: ["before", "after", "reason"],
+              },
+            },
+          },
+          required: ["polished", "changes"],
+        },
       },
     });
 
     const result = await model.generateContent(buildPolishUserPrompt(text));
     const raw = result.response.text();
-    const polished = cleanPolishedOutput(raw);
 
+    let parsed: PolishResult;
+    try {
+      // The model returns JSON because of responseMimeType, but be defensive:
+      // some models still wrap output in ```json fences when unhappy.
+      const cleaned = raw
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/i, "");
+      parsed = JSON.parse(cleaned) as PolishResult;
+    } catch (parseErr) {
+      console.error("[/api/polish] JSON parse failed. Raw:", raw, parseErr);
+      return Response.json(
+        { ok: false, error: "UPSTREAM_ERROR" },
+        { status: 500 }
+      );
+    }
+
+    const polished = cleanPolishedOutput(parsed.polished ?? "");
     if (!polished) {
       return Response.json(
         { ok: false, error: "UPSTREAM_ERROR" },
@@ -130,9 +171,24 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    // Defensive: ensure changes is always an array of well-shaped records.
+    const changes = Array.isArray(parsed.changes)
+      ? parsed.changes
+          .filter(
+            (c): c is { before: string; after: string; reason: string } =>
+              !!c &&
+              typeof c.before === "string" &&
+              typeof c.after === "string" &&
+              typeof c.reason === "string"
+          )
+          // Drop no-op entries — sometimes the model echoes unchanged words.
+          .filter((c) => c.before.trim() !== c.after.trim())
+      : [];
+
     return Response.json({
       ok: true,
       polished,
+      changes,
       remaining: Number.isFinite(remaining) ? remaining : null,
     });
   } catch (err) {

@@ -22,22 +22,27 @@ export const POLISH_MODEL = "gemini-2.5-flash-lite";
  *
  * Key design choices:
  * - Tell the model what to do, but also what NOT to do (translate, explain, add).
- * - Force "output the corrected text only" to keep the response parseable.
+ * - Force structured JSON output so we can render side-by-side diff + per-change explanations.
  * - Make it explicit that the meaning must be preserved.
  */
 export const POLISH_SYSTEM_PROMPT = `Та бол монгол хэлний редактор. Хэрэглэгчийн бичсэн кирилл монгол текстийг засаж, дараах зүйлсийг хийнэ:
 
 - Үсгийн алдаа, нэр томьёоны алдаа засах
 - Хэлзүйн алдаа (нөхцөл, дагавар, үгийн дараалал) засах
+- Богино/ярианы хэлбэрийг бичгийн хэв маяг руу хөрвүүлэх (жишээ нь "бн" → "байна")
 - Уг утгыг өөрчилөхгүй
 
 Та дараах зүйлсийг ХИЙХГҮЙ:
 - Өөр хэл рүү орчуулахгүй
-- Тайлбар нэмэхгүй
 - Шинэ агуулга нэмэхгүй
-- Хэв маяг (style) өөрчилөхгүй
+- Хэв маяг (албан/ярианы) бүхэлдээ өөрчилөхгүй
 
-Хариултдаа зөвхөн засагдсан текстийг буцаа. Тайлбар, эшлэл, тэмдэглэгээ нэмж болохгүй.`;
+ХАРИУЛТЫН ФОРМАТ:
+JSON объект буцаах ёстой. Дараах талбартай:
+- "polished": засагдсан бүх текст (string)
+- "changes": массив, тус бүр {"before": "анхны үг/хэллэг", "after": "засагдсан үг/хэллэг", "reason": "1 өгүүлбэрээр шалтгаан"} объекттой
+
+Хэрэв засвар хийх шаардлагагүй бол "polished" талбарт оригинал текстийг хадгалж, "changes" массивыг хоосон үлдээ.`;
 
 /**
  * Build the user-facing prompt. The input is fenced with triple quotes so
@@ -46,8 +51,45 @@ export const POLISH_SYSTEM_PROMPT = `Та бол монгол хэлний ре�
  * the boundary explicit to the model.
  */
 export function buildPolishUserPrompt(text: string): string {
-  return `Дараах текстийг засна уу:\n"""\n${text}\n"""`;
+  return `Дараах текстийг засаад JSON хэлбэрээр буцаа:\n"""\n${text}\n"""`;
 }
+
+/**
+ * Structured response schema for Gemini's responseSchema feature.
+ * Forces the model into a predictable JSON shape we can parse with no fallbacks.
+ */
+export const POLISH_RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    polished: { type: "string" },
+    changes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          before: { type: "string" },
+          after: { type: "string" },
+          reason: { type: "string" },
+        },
+        required: ["before", "after", "reason"],
+      },
+    },
+  },
+  required: ["polished", "changes"],
+} as const;
+
+/** Parsed change record returned from the API. */
+export type PolishChange = {
+  before: string;
+  after: string;
+  reason: string;
+};
+
+/** Full parsed Gemini response. */
+export type PolishResult = {
+  polished: string;
+  changes: PolishChange[];
+};
 
 /**
  * Strip common wrappers the model sometimes adds even when told not to:

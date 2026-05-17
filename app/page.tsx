@@ -33,7 +33,7 @@ function HomeInner() {
   }, []);
 
   const handleLoad = useCallback((item: HistoryItem) => {
-    setInitialRoman(item.roman);
+    setInitialRoman(item.polished ?? item.cyrillic ?? item.roman);
     setLoadToken((t) => t + 1);
   }, []);
 
@@ -106,7 +106,7 @@ function HomeInner() {
         <footer className="mt-9 md:mt-12 text-xs text-black/50 dark:text-white/50 text-center">
           Латинаар бичээд дассан Монголчуудад зориулав · Built by{" "}
           <a
-            href="https://www.ezaya.dev/"
+            href="https://www.ezaya.dev/mn"
             target="_blank"
             rel="noopener noreferrer"
             className="text-black/70 hover:text-[#1D9E75] dark:text-white/70 dark:hover:text-[#1D9E75] transition-colors duration-150"
