@@ -29,20 +29,11 @@ Copy `.env.local.example` to `.env.local` and fill it in:
 
 ```
 GEMINI_API_KEY=...               # https://aistudio.google.com/apikey
-UPSTASH_REDIS_REST_URL=...       # https://console.upstash.com/
-UPSTASH_REDIS_REST_TOKEN=...
 ```
-
-In local dev the Upstash vars can be left blank — the API "fails open" and
-relies on the client-side localStorage quota. In production both MUST be set;
-otherwise `/api/polish` returns 500 `NOT_CONFIGURED` to prevent burning the
-Gemini free tier.
 
 ### Limits
 
 - 500 characters per request (server + client enforced)
-- 10 requests / IP / 24h sliding window (server, via Upstash)
-- 10 requests / browser / day (client, via localStorage — UX only)
 
 Constants live in `lib/polish-prompt.ts`.
 

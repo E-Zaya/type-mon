@@ -4,30 +4,27 @@
  * Body: { text: string }
  *
  * Response (success):
- *   200 { ok: true, polished: string, remaining: number }
+ *   200 { ok: true, polished: string, changes: PolishChange[] }
  *
  * Response (failure):
- *   400 { ok: false, error: "INVALID_INPUT" | "TOO_LONG", remaining?: number }
- *   429 { ok: false, error: "RATE_LIMIT", remaining: 0, retryAfter: number }
+ *   400 { ok: false, error: "INVALID_INPUT" | "TOO_LONG" }
  *   500 { ok: false, error: "UPSTREAM_ERROR" | "NOT_CONFIGURED" }
  *
  * Notes:
- * - Runs on the default Node.js runtime — @google/generative-ai is more
- *   reliable there than on Edge. (See AGENTS.md: Next.js 16 lets us pick.)
- * - The API key never leaves the server; the browser only ever sees the
- *   resulting text and a remaining-count.
+ * - Runs on the default Node.js runtime for the official Google Gen AI SDK.
+ * - The API key never leaves the server; the browser only sees the result.
  */
 
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import {
   POLISH_MAX_CHARS,
   POLISH_MODEL,
   POLISH_SYSTEM_PROMPT,
   buildPolishUserPrompt,
   cleanPolishedOutput,
+  POLISH_RESPONSE_SCHEMA,
   type PolishResult,
 } from "@/lib/polish-prompt";
-import { getClientIdentifier, getPolishLimiter } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 // Always run at request time — we read headers and call an external API.
@@ -61,44 +58,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  // ---- 2. Rate limit by IP --------------------------------------------
-  const limiter = getPolishLimiter();
-  let remaining = Number.POSITIVE_INFINITY;
-
-  if (limiter) {
-    const identifier = getClientIdentifier(request);
-    const result = await limiter.limit(identifier);
-    remaining = result.remaining;
-
-    if (!result.success) {
-      const retryAfterSec = Math.max(
-        1,
-        Math.ceil((result.reset - Date.now()) / 1000)
-      );
-      return Response.json(
-        {
-          ok: false,
-          error: "RATE_LIMIT",
-          remaining: 0,
-          retryAfter: retryAfterSec,
-        },
-        {
-          status: 429,
-          headers: { "Retry-After": String(retryAfterSec) },
-        }
-      );
-    }
-  } else if (process.env.NODE_ENV === "production") {
-    // In production we refuse to run without a configured limiter — the
-    // Gemini free tier is shared across all users and unguarded access
-    // would burn through the quota in minutes.
-    return Response.json(
-      { ok: false, error: "NOT_CONFIGURED" },
-      { status: 500 }
-    );
-  }
-
-  // ---- 3. Call Gemini --------------------------------------------------
+  // ---- 2. Call Gemini --------------------------------------------------
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json(
@@ -108,11 +68,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
+    const ai = new GoogleGenAI({ apiKey });
+    const result = await ai.models.generateContent({
       model: POLISH_MODEL,
-      systemInstruction: POLISH_SYSTEM_PROMPT,
-      generationConfig: {
+      contents: buildPolishUserPrompt(text),
+      config: {
+        systemInstruction: POLISH_SYSTEM_PROMPT,
         // Low temperature → stable, conservative corrections.
         temperature: 0.3,
         // Generous cap so the "changes" array isn't truncated. Lite model
@@ -121,30 +82,10 @@ export async function POST(request: Request): Promise<Response> {
         // Force structured JSON output — eliminates "model added prose"
         // bugs and lets us parse with JSON.parse.
         responseMimeType: "application/json",
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            polished: { type: SchemaType.STRING },
-            changes: {
-              type: SchemaType.ARRAY,
-              items: {
-                type: SchemaType.OBJECT,
-                properties: {
-                  before: { type: SchemaType.STRING },
-                  after: { type: SchemaType.STRING },
-                  reason: { type: SchemaType.STRING },
-                },
-                required: ["before", "after", "reason"],
-              },
-            },
-          },
-          required: ["polished", "changes"],
-        },
+        responseJsonSchema: POLISH_RESPONSE_SCHEMA,
       },
     });
-
-    const result = await model.generateContent(buildPolishUserPrompt(text));
-    const raw = result.response.text();
+    const raw = result.text ?? "";
 
     let parsed: PolishResult;
     try {
@@ -189,7 +130,6 @@ export async function POST(request: Request): Promise<Response> {
       ok: true,
       polished,
       changes,
-      remaining: Number.isFinite(remaining) ? remaining : null,
     });
   } catch (err) {
     // Don't leak stack traces / API messages to the client.

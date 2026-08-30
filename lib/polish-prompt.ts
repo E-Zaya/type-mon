@@ -6,9 +6,6 @@
 /** Maximum input length, in characters. Enforced on both client and server. */
 export const POLISH_MAX_CHARS = 500;
 
-/** Daily request quota per IP. */
-export const POLISH_DAILY_LIMIT = 10;
-
 /** Gemini model used for polishing. */
 // gemini-2.5-flash-lite is the cheapest stable model that supports
 // generateContent in the current AI Studio free tier. It's fast, small,

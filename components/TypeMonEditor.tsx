@@ -12,17 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
 import SettingsModal from "@/components/SettingsModal";
-import {
-  POLISH_DAILY_LIMIT,
-  POLISH_MAX_CHARS,
-  type PolishChange,
-} from "@/lib/polish-prompt";
-import {
-  getRemainingPolishes,
-  markQuotaExhausted,
-  recordPolishUsed,
-  syncRemainingFromServer,
-} from "@/lib/polish-quota";
+import { POLISH_MAX_CHARS, type PolishChange } from "@/lib/polish-prompt";
 import { diffWords, type DiffToken } from "@/lib/polish-diff";
 
 const HISTORY_KEY = "typemon-history";
@@ -123,9 +113,6 @@ export default function TypeMonEditor({
     getOnlineSnapshot,
     getServerOnlineSnapshot
   );
-  // null means "not yet hydrated from localStorage" — we render a neutral
-  // placeholder during SSR to avoid hydration mismatches.
-  const [polishRemaining, setPolishRemaining] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,7 +120,6 @@ export default function TypeMonEditor({
 
   useEffect(() => {
     setMac(isMac());
-    setPolishRemaining(getRemainingPolishes());
   }, []);
 
   // Sync from parent when loadToken bumps
@@ -233,17 +219,8 @@ export default function TypeMonEditor({
       return;
     }
 
-    // Cache: if we already polished this exact source, don't re-spend quota
-    // or even hit the network. The result is already on screen.
+    // Avoid an unnecessary duplicate request when the result is already shown.
     if (polish.kind === "done" && polish.source === source) {
-      return;
-    }
-
-    if (polishRemaining !== null && polishRemaining <= 0) {
-      setPolish({
-        kind: "error",
-        message: "Өнөөдрийн хязгаар дууссан. Маргааш дахин оролдоно уу.",
-      });
       return;
     }
 
@@ -263,20 +240,9 @@ export default function TypeMonEditor({
             ok: boolean;
             polished?: string;
             changes?: PolishChange[];
-            remaining?: number | null;
             error?: string;
           }
         | null;
-
-      if (res.status === 429) {
-        markQuotaExhausted();
-        setPolishRemaining(0);
-        setPolish({
-          kind: "error",
-          message: "Өнөөдрийн хязгаар дууссан. Маргааш дахин оролдоно уу.",
-        });
-        return;
-      }
 
       if (!res.ok || !data?.ok || !data.polished) {
         const code = data?.error ?? "UPSTREAM_ERROR";
@@ -288,15 +254,6 @@ export default function TypeMonEditor({
             : "Алдаа гарлаа. Дахин оролдоно уу.";
         setPolish({ kind: "error", message });
         return;
-      }
-
-      // Prefer the server's authoritative remaining count; fall back to
-      // local increment when the server didn't include one (dev mode).
-      if (typeof data.remaining === "number") {
-        syncRemainingFromServer(data.remaining);
-        setPolishRemaining(getRemainingPolishes());
-      } else {
-        setPolishRemaining(recordPolishUsed());
       }
 
       setPolish({
@@ -311,7 +268,7 @@ export default function TypeMonEditor({
         message: "Сүлжээний алдаа гарлаа. Дахин оролдоно уу.",
       });
     }
-  }, [cyrillic, online, polish, polishRemaining]);
+  }, [cyrillic, online, polish]);
 
   const handlePolishedCopy = useCallback(async () => {
     if (polish.kind !== "done") return;
@@ -473,14 +430,11 @@ export default function TypeMonEditor({
               disabled={
                 !cyrillic ||
                 !online ||
-                polish.kind === "loading" ||
-                (polishRemaining !== null && polishRemaining <= 0)
+                polish.kind === "loading"
               }
               title={
                 !online
                   ? "Интернетгүй үед AI засвар ажиллахгүй"
-                  : polishRemaining !== null
-                  ? `AI-аар засах · Өдөрт ${polishRemaining}/${POLISH_DAILY_LIMIT} үлдсэн (${modKey}+⇧+P)`
                   : `AI-аар засах (${modKey}+⇧+P)`
               }
               className="
@@ -497,11 +451,6 @@ export default function TypeMonEditor({
             >
               <SparkleIcon spinning={polish.kind === "loading"} />
               <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
-              {polishRemaining !== null && (
-                <span className="text-[10px] tabular-nums opacity-80">
-                  {polishRemaining}/{POLISH_DAILY_LIMIT}
-                </span>
-              )}
             </button>
           </div>
           <div className="group relative">
@@ -672,8 +621,7 @@ export default function TypeMonEditor({
         disabled={
           !cyrillic ||
           !online ||
-          polish.kind === "loading" ||
-          (polishRemaining !== null && polishRemaining <= 0)
+          polish.kind === "loading"
         }
         className="
           md:hidden w-full inline-flex items-center justify-center gap-2
@@ -689,19 +637,7 @@ export default function TypeMonEditor({
       >
         <SparkleIcon spinning={polish.kind === "loading"} />
         <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
-        {polishRemaining !== null && (
-          <span className="text-[10px] tabular-nums opacity-70">
-            ({polishRemaining}/{POLISH_DAILY_LIMIT})
-          </span>
-        )}
       </button>
-      {/* First-time hint, only shown on mobile under the button.
-          Hidden on desktop where the tooltip on the corner button serves the same purpose. */}
-      {polishRemaining !== null && polish.kind === "idle" && (
-        <p className="md:hidden text-[11px] text-black/50 dark:text-white/50 text-center -mt-2">
-          Өдөрт {POLISH_DAILY_LIMIT} удаа үнэгүй ашиглах боломжтой.
-        </p>
-      )}
 
       {/* Secondary stats */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-black/50 dark:text-white/50">
