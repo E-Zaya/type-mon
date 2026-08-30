@@ -4,7 +4,7 @@
  * Key mappings decided by Zaya:
  *   Q → Ө,  W → Ү
  *   J → Ж,  H → Х,  SH → Ш,  CH → Ч,  TS → Ц
- *   AI → АЙ, OI → ОЙ, UI → УЙ
+ *   AI → АЙ, OI → ОЙ, UI → УЙ, WI → ҮЙ
  *   AA → АА (long vowels by doubling)
  *   ' → Ь,  '' → Ъ
  */
@@ -34,6 +34,7 @@ const MULTI_CHAR_MAP: Mapping[] = [
   ['ai', 'ай'],
   ['oi', 'ой'],
   ['ui', 'уй'],
+  ['wi', 'үй'],
   ['ei', 'эй'],
   ['ii', 'ий'],
   ['uu', 'уу'],
