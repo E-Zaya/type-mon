@@ -12,6 +12,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
 import SettingsModal from "@/components/SettingsModal";
+import UsageChip from "@/components/UsageChip";
+import PaywallSheet, { type PaywallReason } from "@/components/PaywallSheet";
+import { usePlan, announcePlanChange } from "@/lib/use-plan";
 import { POLISH_MAX_CHARS, type PolishChange } from "@/lib/polish-prompt";
 import { diffWords, type DiffToken } from "@/lib/polish-diff";
 
@@ -108,6 +111,10 @@ export default function TypeMonEditor({
   const [polishCopied, setPolishCopied] = useState(false);
   const [polishApplied, setPolishApplied] = useState(false);
   const [polishShowChanges, setPolishShowChanges] = useState(false);
+  // What this visitor may do: tier, polishes left, longest text. Server-derived.
+  const { plan } = usePlan();
+  const [paywall, setPaywall] = useState<PaywallReason | null>(null);
+  const maxChars = plan?.maxChars ?? POLISH_MAX_CHARS;
   const online = useSyncExternalStore(
     subscribeOnline,
     getOnlineSnapshot,
@@ -211,11 +218,13 @@ export default function TypeMonEditor({
 
     const source = cyrillic.trim();
     if (!source) return;
-    if (source.length > POLISH_MAX_CHARS) {
+    if (source.length > maxChars) {
       setPolish({
         kind: "error",
-        message: `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`,
+        message: `Уртаа хэтэрсэн байна (${maxChars} тэмдэгтээс багатай байх ёстой).`,
       });
+      // Below Plus the answer to "too long" is Plus; on Plus it is the cap itself.
+      if (plan && plan.tier !== "plus") setPaywall("chars");
       return;
     }
 
@@ -241,14 +250,26 @@ export default function TypeMonEditor({
             polished?: string;
             changes?: PolishChange[];
             error?: string;
+            tier?: "guest" | "free" | "plus";
+            maxChars?: number;
           }
         | null;
+
+      if (res.status === 429 && data?.error === "QUOTA_EXCEEDED") {
+        // Not an error to read; a door to the next tier.
+        setPolish({ kind: "idle" });
+        setPaywall(data.tier === "guest" ? "guest" : "free");
+        announcePlanChange();
+        return;
+      }
 
       if (!res.ok || !data?.ok || !data.polished) {
         const code = data?.error ?? "UPSTREAM_ERROR";
         const message =
           code === "TOO_LONG"
-            ? `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`
+            ? `Уртаа хэтэрсэн байна (${data?.maxChars ?? maxChars} тэмдэгтээс багатай байх ёстой).`
+            : code === "SIGN_IN_REQUIRED"
+            ? "AI засвар ашиглахын тулд нэвтэрнэ үү."
             : code === "NOT_CONFIGURED"
             ? "Үйлчилгээ тохируулагдаагүй байна."
             : "Алдаа гарлаа. Дахин оролдоно уу.";
@@ -262,13 +283,15 @@ export default function TypeMonEditor({
         polished: data.polished,
         changes: data.changes ?? [],
       });
+      // The chip counts down.
+      announcePlanChange();
     } catch {
       setPolish({
         kind: "error",
         message: "Сүлжээний алдаа гарлаа. Дахин оролдоно уу.",
       });
     }
-  }, [cyrillic, online, polish]);
+  }, [cyrillic, online, polish, maxChars, plan]);
 
   const handlePolishedCopy = useCallback(async () => {
     if (polish.kind !== "done") return;
@@ -423,35 +446,39 @@ export default function TypeMonEditor({
             </label>
             {/* Desktop polish button — prominent, lives at the top of the
                 output column so the eye finds it immediately after reading
-                the transliterated text. */}
-            <button
-              type="button"
-              onClick={handlePolish}
-              disabled={
-                !cyrillic ||
-                !online ||
-                polish.kind === "loading"
-              }
-              title={
-                !online
-                  ? "Интернетгүй үед AI засвар ажиллахгүй"
-                  : `AI-аар засах (${modKey}+⇧+P)`
-              }
-              className="
-                hidden md:inline-flex items-center gap-1.5
-                bg-[#1D9E75] hover:bg-[#178b66]
-                border border-[#1D9E75]
-                rounded-md text-xs px-2.5 py-1
-                text-white font-medium
-                shadow-sm
-                transition-all duration-150
-                disabled:opacity-40 disabled:cursor-not-allowed
-                disabled:hover:bg-[#1D9E75]
-              "
-            >
-              <SparkleIcon spinning={polish.kind === "loading"} />
-              <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
-            </button>
+                the transliterated text. The chip beside it says how many
+                are left this window. */}
+            <div className="hidden md:flex items-center gap-2">
+              <UsageChip plan={plan} />
+              <button
+                type="button"
+                onClick={handlePolish}
+                disabled={
+                  !cyrillic ||
+                  !online ||
+                  polish.kind === "loading"
+                }
+                title={
+                  !online
+                    ? "Интернетгүй үед AI засвар ажиллахгүй"
+                    : `AI-аар засах (${modKey}+⇧+P)`
+                }
+                className="
+                  inline-flex items-center gap-1.5
+                  bg-[#1D9E75] hover:bg-[#178b66]
+                  border border-[#1D9E75]
+                  rounded-md text-xs px-2.5 py-1
+                  text-white font-medium
+                  shadow-sm
+                  transition-all duration-150
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                  disabled:hover:bg-[#1D9E75]
+                "
+              >
+                <SparkleIcon spinning={polish.kind === "loading"} />
+                <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
+              </button>
+            </div>
           </div>
           <div className="group relative">
             <AnimatePresence mode="wait">
@@ -638,6 +665,9 @@ export default function TypeMonEditor({
         <SparkleIcon spinning={polish.kind === "loading"} />
         <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
       </button>
+      <div className="md:hidden flex justify-center -mt-2">
+        <UsageChip plan={plan} />
+      </div>
 
       {/* Secondary stats */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-black/50 dark:text-white/50">
@@ -805,6 +835,7 @@ export default function TypeMonEditor({
 
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <PaywallSheet reason={paywall} plan={plan} onClose={() => setPaywall(null)} />
     </div>
   );
 }
