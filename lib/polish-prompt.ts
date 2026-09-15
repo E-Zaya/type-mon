@@ -41,6 +41,35 @@ JSON объект буцаах ёстой. Дараах талбартай:
 
 Хэрэв засвар хийх шаардлагагүй бол "polished" талбарт оригинал текстийг хадгалж, "changes" массивыг хоосон үлдээ.`;
 
+/** How a Plus member wants the text to sound. "neutral" is the classic light edit. */
+export type PolishTone = "neutral" | "formal" | "casual" | "short";
+
+export const POLISH_TONES: { id: PolishTone; label: string; hint: string }[] = [
+  { id: "neutral", label: "Энгийн засвар", hint: "Утга, хэв маягийг хадгална" },
+  { id: "formal", label: "Албан", hint: "Ажил, албан бичиг, мэйл" },
+  { id: "casual", label: "Найзархаг", hint: "Чат, найзууд" },
+  { id: "short", label: "Богино", hint: "Утгыг хадгалж товчилно" },
+];
+
+export function isTone(value: unknown): value is PolishTone {
+  return typeof value === "string" && POLISH_TONES.some((t) => t.id === value);
+}
+
+/* The base prompt forbids changing the register; a tone lifts that one
+   rule for the requested direction and nothing else. */
+const TONE_INSTRUCTIONS: Record<Exclude<PolishTone, "neutral">, string> = {
+  formal:
+    "НЭМЭЛТ ЗААВАР (өнгө аяс): Хэрэглэгч албан хэв маягийг хүссэн. Ярианы, найзархаг хэллэгийг албан үг хэллэгээр соль, «Та» гэж хүндэтгэлтэй хандаж, бүрэн хэлбэрийн үгс ашигла. Утгыг өөрчлөхгүй, шинэ агуулга нэмэхгүй.",
+  casual:
+    "НЭМЭЛТ ЗААВАР (өнгө аяс): Хэрэглэгч найзархаг, хөнгөн хэв маягийг хүссэн. Хэт албан хэллэгийг ярианы, дулаахан үг хэллэгээр соль, «чи» гэж хандаж болно. Утгыг өөрчлөхгүй, шинэ агуулга нэмэхгүй.",
+  short:
+    "НЭМЭЛТ ЗААВАР (өнгө аяс): Хэрэглэгч богино хувилбар хүссэн. Утгыг бүрэн хадгалж, давталт, илүү үг, хоосон хэллэгийг хасаж 30–50 хувиар товчил. Шинэ агуулга нэмэхгүй.",
+};
+
+export function systemPromptFor(tone: PolishTone): string {
+  return tone === "neutral" ? POLISH_SYSTEM_PROMPT : `${POLISH_SYSTEM_PROMPT}\n\n${TONE_INSTRUCTIONS[tone]}`;
+}
+
 /**
  * Build the user-facing prompt. The input is fenced with triple quotes so
  * any instructions inside it are clearly data, not commands. This is a

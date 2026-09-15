@@ -12,7 +12,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
 import SettingsModal from "@/components/SettingsModal";
-import { POLISH_MAX_CHARS, type PolishChange } from "@/lib/polish-prompt";
+import UsageChip from "@/components/UsageChip";
+import PaywallSheet, { type PaywallReason } from "@/components/PaywallSheet";
+import { usePlan, announcePlanChange } from "@/lib/use-plan";
+import { usePref } from "@/lib/client-pref";
+import { useSpellingRules } from "@/lib/spelling-rules";
+import { POLISH_MAX_CHARS, POLISH_TONES, isTone, type PolishChange, type PolishTone } from "@/lib/polish-prompt";
 import { diffWords, type DiffToken } from "@/lib/polish-diff";
 
 const HISTORY_KEY = "typemon-history";
@@ -25,6 +30,7 @@ type PolishStatus =
       kind: "done";
       /** The cyrillic text that was sent — used to detect "same input, skip API". */
       source: string;
+      tone: PolishTone;
       polished: string;
       changes: PolishChange[];
     }
@@ -108,6 +114,20 @@ export default function TypeMonEditor({
   const [polishCopied, setPolishCopied] = useState(false);
   const [polishApplied, setPolishApplied] = useState(false);
   const [polishShowChanges, setPolishShowChanges] = useState(false);
+  // What this visitor may do: tier, polishes left, longest text. Server-derived.
+  const { plan } = usePlan();
+  const [paywall, setPaywall] = useState<PaywallReason | null>(null);
+  const maxChars = plan?.maxChars ?? POLISH_MAX_CHARS;
+  const isPlus = plan?.tier === "plus";
+  // Plus: a tone for the edit and personal spelling rules. Both remembered
+  // on this device; both ignored below Plus so a lapsed plan changes nothing silently.
+  const [toneRaw, setTone] = usePref("typemon-tone", "neutral");
+  const tone: PolishTone = isPlus && isTone(toneRaw) ? toneRaw : "neutral";
+  const { rules } = useSpellingRules();
+  const activeRules = useMemo(
+    () => (isPlus ? rules.map((r) => [r.from, r.to] as [string, string]) : []),
+    [isPlus, rules]
+  );
   const online = useSyncExternalStore(
     subscribeOnline,
     getOnlineSnapshot,
@@ -143,7 +163,7 @@ export default function TypeMonEditor({
     return () => window.clearInterval(id);
   }, [startedAt]);
 
-  const segments = useMemo(() => transliterateSegments(input), [input]);
+  const segments = useMemo(() => transliterateSegments(input, activeRules), [input, activeRules]);
   const cyrillic = useMemo(() => segments.map((s) => s.text).join(""), [segments]);
   // Stable key for the output's AnimatePresence — re-mount only when the
   // textual output changes, otherwise highlights flicker on every keystroke.
@@ -211,16 +231,18 @@ export default function TypeMonEditor({
 
     const source = cyrillic.trim();
     if (!source) return;
-    if (source.length > POLISH_MAX_CHARS) {
+    if (source.length > maxChars) {
       setPolish({
         kind: "error",
-        message: `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`,
+        message: `Уртаа хэтэрсэн байна (${maxChars} тэмдэгтээс багатай байх ёстой).`,
       });
+      // Below Plus the answer to "too long" is Plus; on Plus it is the cap itself.
+      if (plan && plan.tier !== "plus") setPaywall("chars");
       return;
     }
 
     // Avoid an unnecessary duplicate request when the result is already shown.
-    if (polish.kind === "done" && polish.source === source) {
+    if (polish.kind === "done" && polish.source === source && polish.tone === tone) {
       return;
     }
 
@@ -232,7 +254,7 @@ export default function TypeMonEditor({
       const res = await fetch("/api/polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: source }),
+        body: JSON.stringify({ text: source, tone }),
       });
 
       const data = (await res.json().catch(() => null)) as
@@ -241,14 +263,26 @@ export default function TypeMonEditor({
             polished?: string;
             changes?: PolishChange[];
             error?: string;
+            tier?: "guest" | "free" | "plus";
+            maxChars?: number;
           }
         | null;
+
+      if (res.status === 429 && data?.error === "QUOTA_EXCEEDED") {
+        // Not an error to read; a door to the next tier.
+        setPolish({ kind: "idle" });
+        setPaywall(data.tier === "guest" ? "guest" : "free");
+        announcePlanChange();
+        return;
+      }
 
       if (!res.ok || !data?.ok || !data.polished) {
         const code = data?.error ?? "UPSTREAM_ERROR";
         const message =
           code === "TOO_LONG"
-            ? `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`
+            ? `Уртаа хэтэрсэн байна (${data?.maxChars ?? maxChars} тэмдэгтээс багатай байх ёстой).`
+            : code === "SIGN_IN_REQUIRED"
+            ? "AI засвар ашиглахын тулд нэвтэрнэ үү."
             : code === "NOT_CONFIGURED"
             ? "Үйлчилгээ тохируулагдаагүй байна."
             : "Алдаа гарлаа. Дахин оролдоно уу.";
@@ -259,16 +293,19 @@ export default function TypeMonEditor({
       setPolish({
         kind: "done",
         source,
+        tone,
         polished: data.polished,
         changes: data.changes ?? [],
       });
+      // The chip counts down.
+      announcePlanChange();
     } catch {
       setPolish({
         kind: "error",
         message: "Сүлжээний алдаа гарлаа. Дахин оролдоно уу.",
       });
     }
-  }, [cyrillic, online, polish]);
+  }, [cyrillic, online, polish, maxChars, plan, tone]);
 
   const handlePolishedCopy = useCallback(async () => {
     if (polish.kind !== "done") return;
@@ -423,35 +460,40 @@ export default function TypeMonEditor({
             </label>
             {/* Desktop polish button — prominent, lives at the top of the
                 output column so the eye finds it immediately after reading
-                the transliterated text. */}
-            <button
-              type="button"
-              onClick={handlePolish}
-              disabled={
-                !cyrillic ||
-                !online ||
-                polish.kind === "loading"
-              }
-              title={
-                !online
-                  ? "Интернетгүй үед AI засвар ажиллахгүй"
-                  : `AI-аар засах (${modKey}+⇧+P)`
-              }
-              className="
-                hidden md:inline-flex items-center gap-1.5
-                bg-[#1D9E75] hover:bg-[#178b66]
-                border border-[#1D9E75]
-                rounded-md text-xs px-2.5 py-1
-                text-white font-medium
-                shadow-sm
-                transition-all duration-150
-                disabled:opacity-40 disabled:cursor-not-allowed
-                disabled:hover:bg-[#1D9E75]
-              "
-            >
-              <SparkleIcon spinning={polish.kind === "loading"} />
-              <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
-            </button>
+                the transliterated text. The chip beside it says how many
+                are left this window. */}
+            <div className="hidden md:flex items-center gap-2">
+              {isPlus && <ToneSelect value={tone} onChange={setTone} />}
+              <UsageChip plan={plan} />
+              <button
+                type="button"
+                onClick={handlePolish}
+                disabled={
+                  !cyrillic ||
+                  !online ||
+                  polish.kind === "loading"
+                }
+                title={
+                  !online
+                    ? "Интернетгүй үед AI засвар ажиллахгүй"
+                    : `AI-аар засах (${modKey}+⇧+P)`
+                }
+                className="
+                  inline-flex items-center gap-1.5
+                  bg-[#1D9E75] hover:bg-[#178b66]
+                  border border-[#1D9E75]
+                  rounded-md text-xs px-2.5 py-1
+                  text-white font-medium
+                  shadow-sm
+                  transition-all duration-150
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                  disabled:hover:bg-[#1D9E75]
+                "
+              >
+                <SparkleIcon spinning={polish.kind === "loading"} />
+                <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
+              </button>
+            </div>
           </div>
           <div className="group relative">
             <AnimatePresence mode="wait">
@@ -638,6 +680,10 @@ export default function TypeMonEditor({
         <SparkleIcon spinning={polish.kind === "loading"} />
         <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
       </button>
+      <div className="md:hidden flex items-center justify-center gap-2 -mt-2">
+        {isPlus && <ToneSelect value={tone} onChange={setTone} />}
+        <UsageChip plan={plan} />
+      </div>
 
       {/* Secondary stats */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-black/50 dark:text-white/50">
@@ -666,6 +712,11 @@ export default function TypeMonEditor({
               <label className="text-[11px] text-[#1D9E75] uppercase tracking-widest font-medium inline-flex items-center gap-1.5">
                 <SparkleIcon />
                 AI ЗАСВАР
+                {polish.kind === "done" && polish.tone !== "neutral" && (
+                  <span className="normal-case tracking-normal text-black/50 dark:text-white/50">
+                    · {POLISH_TONES.find((t) => t.id === polish.tone)?.label}
+                  </span>
+                )}
               </label>
               {polish.kind === "done" && (
                 <div className="flex items-center gap-1.5">
@@ -804,8 +855,31 @@ export default function TypeMonEditor({
       </AnimatePresence>
 
       {/* Settings modal */}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} plus={isPlus} />
+      <PaywallSheet reason={paywall} plan={plan} onClose={() => setPaywall(null)} />
     </div>
+  );
+}
+
+/** Plus only: how the edit should sound. */
+function ToneSelect({ value, onChange }: { value: PolishTone; onChange: (value: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label="Өнгө аяс"
+      title="Өнгө аяс (Plus)"
+      className="
+        h-6 pl-1.5 pr-5 rounded-md
+        border border-[#1D9E75]/40 bg-transparent
+        text-[11px] text-[#1D9E75]
+        outline-none focus:border-[#1D9E75]
+      "
+    >
+      {POLISH_TONES.map((t) => (
+        <option key={t.id} value={t.id}>{t.label}</option>
+      ))}
+    </select>
   );
 }
 

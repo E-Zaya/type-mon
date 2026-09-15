@@ -29,7 +29,24 @@ Copy `.env.local.example` to `.env.local` and fill it in:
 
 ```
 GEMINI_API_KEY=...               # https://aistudio.google.com/apikey
+
+# Accounts and Plus (Supabase → Project Settings → API)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+# Where auth links land. Local: http://localhost:3003
+NEXT_PUBLIC_SITE_URL=https://type-mon.vercel.app
+# Signs the guest-quota cookie (any long random string; `openssl rand -hex 32`)
+TYPEMON_COOKIE_SECRET=...
 ```
+
+Without the Supabase variables the app runs in guest mode: conversion and
+the typing test work, sign-in is hidden.
+
+### Database
+
+Apply `supabase/migrations/*.sql` in order (Supabase SQL editor or `supabase db push`).
+In Supabase Auth, enable the Google provider and the email (magic link)
+provider, and add `<site>/auth/callback` to the redirect URL allow-list.
 
 ### Limits
 
