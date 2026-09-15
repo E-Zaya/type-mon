@@ -30,22 +30,22 @@ export default function PaywallSheet({ reason, plan, onClose }: Props) {
 
   if (typeof document === "undefined") return null;
 
-  const guest = reason === "guest" || (reason === "chars" && plan?.tier === "guest");
-  const copy = guest
+  const guest = plan?.tier === "guest";
+  const copy = reason === "chars"
+    ? {
+        title: `${POLISH_CHARS.free} тэмдэгтээс урт текст`,
+        body: `Plus дээр нэг удаад ${POLISH_CHARS.plus.toLocaleString("en-US")} тэмдэгт хүртэл, сард ${POLISH_LIMIT.plus.toLocaleString("en-US")} удаа засуулна.`,
+        cta: guest ? "Нэвтэрч Plus үзэх" : `Plus — ${formatMnt(PRICES_MNT.monthly)}/сар`,
+        href: guest ? `/login?next=${encodeURIComponent("/plus")}` : "/plus",
+        foot: "Эсвэл текстээ хоёр хувааж засуулаарай.",
+      }
+    : reason === "guest"
     ? {
         title: `Өнөөдрийн ${POLISH_LIMIT.guest} үнэгүй засвар дууслаа`,
         body: `Нэвтэрвэл сард ${POLISH_LIMIT.free} удаа засуулна. Нууц үг хэрэггүй — Google эсвэл имэйлийн холбоос.`,
         cta: "Нэвтрэх",
         href: "/login",
         foot: "Хөрвүүлэлт хэвээрээ үнэгүй, хязгааргүй.",
-      }
-    : reason === "chars"
-    ? {
-        title: `${POLISH_CHARS.free} тэмдэгтээс урт текст`,
-        body: `Plus дээр нэг удаад ${POLISH_CHARS.plus.toLocaleString("en-US")} тэмдэгт хүртэл, сард ${POLISH_LIMIT.plus.toLocaleString("en-US")} удаа засуулна.`,
-        cta: `Plus — ${formatMnt(PRICES_MNT.monthly)}/сар`,
-        href: "/plus",
-        foot: "Эсвэл текстээ хоёр хувааж засуулаарай.",
       }
     : {
         title: `Энэ сарын ${POLISH_LIMIT.free} засвар дууслаа`,

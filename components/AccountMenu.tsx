@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { usePlan } from "@/lib/use-plan";
 
 /* One control in the header: a sign-in link for guests, an avatar with a
    small menu for members. Hidden entirely when the deployment has no
    Supabase, so nothing about accounts leaks into a guest-only build. */
 export default function AccountMenu() {
   const { ready, mode, signedIn, email, name, avatarUrl, signOut } = useAuth();
+  const { plan } = usePlan();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -92,6 +94,24 @@ export default function AccountMenu() {
             {name && email && <div className="text-xs text-black/50 dark:text-white/50 truncate">{email}</div>}
           </div>
           <div className="my-1 h-px bg-black/10 dark:bg-white/10" />
+          <Link
+            href="/plus"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="
+              flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg text-sm
+              text-black/80 hover:text-black hover:bg-black/5
+              dark:text-white/80 dark:hover:text-white dark:hover:bg-white/5
+              transition-colors duration-150
+            "
+          >
+            <span>{plan?.tier === "plus" ? "Plus" : "Plus авах"}</span>
+            {plan && (
+              <span className="text-xs text-black/50 dark:text-white/50 tabular-nums">
+                {plan.remaining}/{plan.limit}
+              </span>
+            )}
+          </Link>
           <button
             type="button"
             role="menuitem"
