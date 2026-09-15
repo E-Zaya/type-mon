@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import WpmGame from "@/components/wpm/WpmGame";
 import ThemeToggle from "@/components/ThemeToggle";
+import AccountMenu from "@/components/AccountMenu";
 
 export const metadata: Metadata = {
   title: "TypeMon Хурд — 60 секундын бичих хурдны тест",
@@ -28,7 +29,10 @@ export default function WpmPage() {
               Type<span className="text-[#1D9E75]">Mon</span>
               <span className="ml-2 text-base text-black/50 dark:text-white/50">Хурд</span>
             </Link>
-            <ThemeToggle />
+            <div className="flex items-center gap-3">
+              <AccountMenu />
+              <ThemeToggle />
+            </div>
           </div>
           <div className="mt-4 md:mt-5 max-w-xl">
             <h1 className="text-2xl md:text-3xl font-light tracking-tight text-black dark:text-white leading-tight">

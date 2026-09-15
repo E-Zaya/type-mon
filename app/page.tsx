@@ -6,6 +6,7 @@ import Link from "next/link";
 import TypeMonEditor from "@/components/TypeMonEditor";
 import HistoryPanel, { type HistoryItem } from "@/components/HistoryPanel";
 import ThemeToggle from "@/components/ThemeToggle";
+import AccountMenu from "@/components/AccountMenu";
 
 const URL_TEXT_MAX = 2000;
 
@@ -66,6 +67,7 @@ function HomeInner() {
               >
                 ⚡ <span className="hidden sm:inline">Хурдаа шалгах</span><span className="sm:hidden">Хурд</span>
               </Link>
+              <AccountMenu />
               <ThemeToggle />
             </div>
           </div>
