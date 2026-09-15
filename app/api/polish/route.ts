@@ -23,11 +23,13 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
   POLISH_MODEL,
-  POLISH_SYSTEM_PROMPT,
   buildPolishUserPrompt,
   cleanPolishedOutput,
+  isTone,
+  systemPromptFor,
   POLISH_RESPONSE_SCHEMA,
   type PolishResult,
+  type PolishTone,
 } from "@/lib/polish-prompt";
 import { geminiConfig } from "@/lib/env";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -38,7 +40,7 @@ import { POLISH_CHARS, POLISH_LIMIT, type Tier } from "@/lib/plan-constants";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PolishRequest = { text?: unknown };
+type PolishRequest = { text?: unknown; tone?: unknown };
 
 export async function POST(request: Request): Promise<Response> {
   // ---- 1. Parse -------------------------------------------------------
@@ -63,6 +65,9 @@ export async function POST(request: Request): Promise<Response> {
   } else if (!guestMeteringConfigured()) {
     return NextResponse.json({ ok: false, error: "SIGN_IN_REQUIRED" }, { status: 401 });
   }
+
+  // A tone is a Plus feature; anyone else gets the classic edit, silently.
+  const tone: PolishTone = tier === "plus" && isTone(body.tone) ? body.tone : "neutral";
 
   // ---- 3. Length for this tier ------------------------------------------
   const maxChars = POLISH_CHARS[tier];
@@ -104,7 +109,7 @@ export async function POST(request: Request): Promise<Response> {
       model: POLISH_MODEL,
       contents: buildPolishUserPrompt(text),
       config: {
-        systemInstruction: POLISH_SYSTEM_PROMPT,
+        systemInstruction: systemPromptFor(tone),
         temperature: 0.3,
         maxOutputTokens: 2048,
         responseMimeType: "application/json",
@@ -174,7 +179,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const response = NextResponse.json(
-    { ok: true, polished, changes, tier, remaining },
+    { ok: true, polished, changes, tier, remaining, tone },
     { headers: { "Cache-Control": "no-store" } }
   );
   if (tier === "guest") {

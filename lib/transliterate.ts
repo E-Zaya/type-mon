@@ -71,11 +71,20 @@ function applyCase(cyrLower: string, origSlice: string): string {
   return cyrLower;
 }
 
+/** A personal override: latin (lowercase) → cyrillic (lowercase). */
+export type Rule = [string, string];
+
+/** Longest first, so a 2-letter rule wins over a 1-letter one at the same spot. */
+function orderRules(rules: ReadonlyArray<Rule>): Rule[] {
+  return [...rules].sort((a, b) => b[0].length - a[0].length);
+}
+
 /**
  * Convert a chunk of latin text into cyrillic.
  * Internal helper — does NOT understand the *...* escape syntax.
+ * Personal rules are checked before the built-in table.
  */
-function transliterateChunk(text: string): string {
+function transliterateChunk(text: string, rules: Rule[]): string {
   let result = '';
   let i = 0;
   const lower = text.toLowerCase();
@@ -90,6 +99,17 @@ function transliterateChunk(text: string): string {
       continue;
     }
 
+    let matched = false;
+    for (const [rom, cyr] of rules) {
+      if (lower.startsWith(rom, i)) {
+        result += applyCase(cyr, text.slice(i, i + rom.length));
+        i += rom.length;
+        matched = true;
+        break;
+      }
+    }
+    if (matched) continue;
+
     // Handle '' (double apostrophe → Ъ) before single apostrophe
     if (ch === "'" && text[i + 1] === "'") {
       result += 'ъ';
@@ -98,7 +118,6 @@ function transliterateChunk(text: string): string {
     }
 
     // Try multi-character mappings first
-    let matched = false;
     for (const [rom, cyr] of MULTI_CHAR_MAP) {
       if (rom === "''") continue; // handled above
       const len = rom.length;
@@ -137,8 +156,9 @@ export type Segment = {
  *
  * Returns an array of segments so the UI can highlight literal sections.
  */
-export function transliterateSegments(text: string): Segment[] {
+export function transliterateSegments(text: string, personal: ReadonlyArray<Rule> = []): Segment[] {
   const segments: Segment[] = [];
+  const rules = personal.length ? orderRules(personal) : [];
 
   // Find all matched *...* pairs. Greedy from left.
   // We deliberately do NOT match across multiple lines if a closing * is missing.
@@ -148,7 +168,7 @@ export function transliterateSegments(text: string): Segment[] {
     if (star === -1) {
       // No more stars — transliterate the rest.
       const tail = text.slice(i);
-      if (tail) segments.push({ text: transliterateChunk(tail), literal: false });
+      if (tail) segments.push({ text: transliterateChunk(tail, rules), literal: false });
       break;
     }
 
@@ -157,13 +177,13 @@ export function transliterateSegments(text: string): Segment[] {
     if (close === -1) {
       // Unmatched opening * — transliterate everything (including the *).
       const tail = text.slice(i);
-      if (tail) segments.push({ text: transliterateChunk(tail), literal: false });
+      if (tail) segments.push({ text: transliterateChunk(tail, rules), literal: false });
       break;
     }
 
     // Convert text before the opening *
     if (star > i) {
-      segments.push({ text: transliterateChunk(text.slice(i, star)), literal: false });
+      segments.push({ text: transliterateChunk(text.slice(i, star), rules), literal: false });
     }
 
     // Literal content between * and * (excluding the stars themselves)
@@ -190,6 +210,6 @@ export function transliterateSegments(text: string): Segment[] {
  * transliterate("gov'")                        // → 'говь'
  * transliterate('Minii mergejil *Programmer*') // → 'Миний мэргэжил Programmer'
  */
-export function transliterate(text: string): string {
-  return transliterateSegments(text).map((s) => s.text).join('');
+export function transliterate(text: string, personal: ReadonlyArray<Rule> = []): string {
+  return transliterateSegments(text, personal).map((s) => s.text).join('');
 }

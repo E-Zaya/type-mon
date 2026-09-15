@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { MAX_RULES, useSpellingRules } from "@/lib/spelling-rules";
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  /** Personal rules are a Plus feature; below Plus the section explains and links. */
+  plus?: boolean;
 };
 
 /**
@@ -65,7 +69,7 @@ const SPECIAL: Array<[string, string]> = [
   ["ei", "эй"],
 ];
 
-export default function SettingsModal({ open, onClose }: Props) {
+export default function SettingsModal({ open, onClose, plus = false }: Props) {
   const mounted = useClientMounted();
   const titleId = useId();
   const sheetRef = useRef<HTMLElement | null>(null);
@@ -308,6 +312,8 @@ export default function SettingsModal({ open, onClose }: Props) {
                 </p>
               </section>
 
+              <RulesSection plus={plus} />
+
               {/* Keyboard shortcuts */}
               <section
                 className="
@@ -331,6 +337,112 @@ export default function SettingsModal({ open, onClose }: Props) {
       )}
     </AnimatePresence>,
     document.body
+  );
+}
+
+/* Personal rules: "I write ө as o'" — a few Latin letters that should
+   become a few Cyrillic ones, checked before the built-in table. */
+function RulesSection({ plus }: { plus: boolean }) {
+  const { rules, add, remove } = useSpellingRules();
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const message = add(from, to);
+    setError(message);
+    if (!message) {
+      setFrom("");
+      setTo("");
+    }
+  }
+
+  return (
+    <section className="border-t border-black/10 dark:border-white/10 pt-5">
+      <h3 className="text-[11px] text-black/60 dark:text-white/60 uppercase tracking-widest mb-3 flex items-center gap-2">
+        Миний дүрэм
+        <span className="normal-case tracking-normal text-[#1D9E75]">Plus</span>
+      </h3>
+
+      {!plus ? (
+        <p className="text-sm text-black/70 dark:text-white/70 leading-relaxed">
+          Өөрийн бичдэг хэв маягаа хадгал: жишээ нь{" "}
+          <code className="font-mono text-[#1D9E75]">o&apos;</code> → <span className="font-cyrillic">ө</span>,{" "}
+          <code className="font-mono text-[#1D9E75]">y</code> → <span className="font-cyrillic">ү</span>. Дүрэм нь суурь хүснэгтээс өмнө ажиллана.{" "}
+          <Link href="/plus" className="text-[#1D9E75] hover:underline">Plus-д нээлттэй →</Link>
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {rules.length > 0 ? (
+            <ul className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {rules.map((rule) => (
+                <li
+                  key={rule.from}
+                  className="
+                    flex items-center justify-between gap-2 px-2.5 py-1.5
+                    bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-md
+                  "
+                >
+                  <span className="text-sm">
+                    <span className="font-mono text-black/70 dark:text-white/70">{rule.from}</span>
+                    <span className="mx-1.5 text-black/40 dark:text-white/40">→</span>
+                    <span className="font-cyrillic text-black/90 dark:text-white/90">{rule.to}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => remove(rule.from)}
+                    aria-label={`${rule.from} дүрмийг устгах`}
+                    className="text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white text-xs transition-colors duration-150"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-black/60 dark:text-white/60">
+              Дүрэм байхгүй. Жишээ: <code className="font-mono text-[#1D9E75]">o&apos;</code> → <span className="font-cyrillic">ө</span>
+            </p>
+          )}
+
+          <form onSubmit={submit} className="flex items-center gap-2">
+            <input
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+              placeholder="латин"
+              aria-label="Латин үсэг"
+              maxLength={4}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-24 h-9 px-2.5 rounded-md bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-mono text-sm outline-none focus:border-[#1D9E75]/60"
+            />
+            <span className="text-black/40 dark:text-white/40">→</span>
+            <input
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              placeholder="кирилл"
+              aria-label="Кирилл үсэг"
+              maxLength={4}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-24 h-9 px-2.5 rounded-md bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 font-cyrillic text-sm outline-none focus:border-[#1D9E75]/60"
+            />
+            <button
+              type="submit"
+              disabled={!from.trim() || !to.trim() || rules.length >= MAX_RULES}
+              className="h-9 px-3 rounded-md bg-[#1D9E75] hover:bg-[#178b66] text-white text-sm transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Нэмэх
+            </button>
+          </form>
+          {error && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{error}</p>}
+          <p className="text-xs text-black/50 dark:text-white/50">Зөвхөн энэ төхөөрөмж дээр хадгалагдана. Хамгийн ихдээ {MAX_RULES}.</p>
+        </div>
+      )}
+    </section>
   );
 }
 

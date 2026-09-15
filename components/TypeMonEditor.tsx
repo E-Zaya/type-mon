@@ -15,7 +15,9 @@ import SettingsModal from "@/components/SettingsModal";
 import UsageChip from "@/components/UsageChip";
 import PaywallSheet, { type PaywallReason } from "@/components/PaywallSheet";
 import { usePlan, announcePlanChange } from "@/lib/use-plan";
-import { POLISH_MAX_CHARS, type PolishChange } from "@/lib/polish-prompt";
+import { usePref } from "@/lib/client-pref";
+import { useSpellingRules } from "@/lib/spelling-rules";
+import { POLISH_MAX_CHARS, POLISH_TONES, isTone, type PolishChange, type PolishTone } from "@/lib/polish-prompt";
 import { diffWords, type DiffToken } from "@/lib/polish-diff";
 
 const HISTORY_KEY = "typemon-history";
@@ -28,6 +30,7 @@ type PolishStatus =
       kind: "done";
       /** The cyrillic text that was sent — used to detect "same input, skip API". */
       source: string;
+      tone: PolishTone;
       polished: string;
       changes: PolishChange[];
     }
@@ -115,6 +118,16 @@ export default function TypeMonEditor({
   const { plan } = usePlan();
   const [paywall, setPaywall] = useState<PaywallReason | null>(null);
   const maxChars = plan?.maxChars ?? POLISH_MAX_CHARS;
+  const isPlus = plan?.tier === "plus";
+  // Plus: a tone for the edit and personal spelling rules. Both remembered
+  // on this device; both ignored below Plus so a lapsed plan changes nothing silently.
+  const [toneRaw, setTone] = usePref("typemon-tone", "neutral");
+  const tone: PolishTone = isPlus && isTone(toneRaw) ? toneRaw : "neutral";
+  const { rules } = useSpellingRules();
+  const activeRules = useMemo(
+    () => (isPlus ? rules.map((r) => [r.from, r.to] as [string, string]) : []),
+    [isPlus, rules]
+  );
   const online = useSyncExternalStore(
     subscribeOnline,
     getOnlineSnapshot,
@@ -150,7 +163,7 @@ export default function TypeMonEditor({
     return () => window.clearInterval(id);
   }, [startedAt]);
 
-  const segments = useMemo(() => transliterateSegments(input), [input]);
+  const segments = useMemo(() => transliterateSegments(input, activeRules), [input, activeRules]);
   const cyrillic = useMemo(() => segments.map((s) => s.text).join(""), [segments]);
   // Stable key for the output's AnimatePresence — re-mount only when the
   // textual output changes, otherwise highlights flicker on every keystroke.
@@ -229,7 +242,7 @@ export default function TypeMonEditor({
     }
 
     // Avoid an unnecessary duplicate request when the result is already shown.
-    if (polish.kind === "done" && polish.source === source) {
+    if (polish.kind === "done" && polish.source === source && polish.tone === tone) {
       return;
     }
 
@@ -241,7 +254,7 @@ export default function TypeMonEditor({
       const res = await fetch("/api/polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: source }),
+        body: JSON.stringify({ text: source, tone }),
       });
 
       const data = (await res.json().catch(() => null)) as
@@ -280,6 +293,7 @@ export default function TypeMonEditor({
       setPolish({
         kind: "done",
         source,
+        tone,
         polished: data.polished,
         changes: data.changes ?? [],
       });
@@ -291,7 +305,7 @@ export default function TypeMonEditor({
         message: "Сүлжээний алдаа гарлаа. Дахин оролдоно уу.",
       });
     }
-  }, [cyrillic, online, polish, maxChars, plan]);
+  }, [cyrillic, online, polish, maxChars, plan, tone]);
 
   const handlePolishedCopy = useCallback(async () => {
     if (polish.kind !== "done") return;
@@ -449,6 +463,7 @@ export default function TypeMonEditor({
                 the transliterated text. The chip beside it says how many
                 are left this window. */}
             <div className="hidden md:flex items-center gap-2">
+              {isPlus && <ToneSelect value={tone} onChange={setTone} />}
               <UsageChip plan={plan} />
               <button
                 type="button"
@@ -665,7 +680,8 @@ export default function TypeMonEditor({
         <SparkleIcon spinning={polish.kind === "loading"} />
         <span>{polish.kind === "loading" ? "Засаж байна…" : "AI-аар засах"}</span>
       </button>
-      <div className="md:hidden flex justify-center -mt-2">
+      <div className="md:hidden flex items-center justify-center gap-2 -mt-2">
+        {isPlus && <ToneSelect value={tone} onChange={setTone} />}
         <UsageChip plan={plan} />
       </div>
 
@@ -696,6 +712,11 @@ export default function TypeMonEditor({
               <label className="text-[11px] text-[#1D9E75] uppercase tracking-widest font-medium inline-flex items-center gap-1.5">
                 <SparkleIcon />
                 AI ЗАСВАР
+                {polish.kind === "done" && polish.tone !== "neutral" && (
+                  <span className="normal-case tracking-normal text-black/50 dark:text-white/50">
+                    · {POLISH_TONES.find((t) => t.id === polish.tone)?.label}
+                  </span>
+                )}
               </label>
               {polish.kind === "done" && (
                 <div className="flex items-center gap-1.5">
@@ -834,9 +855,31 @@ export default function TypeMonEditor({
       </AnimatePresence>
 
       {/* Settings modal */}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} plus={isPlus} />
       <PaywallSheet reason={paywall} plan={plan} onClose={() => setPaywall(null)} />
     </div>
+  );
+}
+
+/** Plus only: how the edit should sound. */
+function ToneSelect({ value, onChange }: { value: PolishTone; onChange: (value: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label="Өнгө аяс"
+      title="Өнгө аяс (Plus)"
+      className="
+        h-6 pl-1.5 pr-5 rounded-md
+        border border-[#1D9E75]/40 bg-transparent
+        text-[11px] text-[#1D9E75]
+        outline-none focus:border-[#1D9E75]
+      "
+    >
+      {POLISH_TONES.map((t) => (
+        <option key={t.id} value={t.id}>{t.label}</option>
+      ))}
+    </select>
   );
 }
 
