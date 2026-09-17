@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import TypeMonEditor from "@/components/TypeMonEditor";
 import HistoryPanel, { type HistoryItem } from "@/components/HistoryPanel";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -54,6 +55,17 @@ function HomeInner() {
               Type<span className="text-[#1D9E75]">Mon</span>
             </h1>
             <div className="flex items-center gap-3">
+              <Link
+                href="/wpm"
+                className="
+                  inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-lg
+                  border border-[#1D9E75]/50 text-[#1D9E75] text-sm
+                  hover:bg-[#1D9E75]/10 transition-colors duration-150
+                "
+                title="60 секундын бичих хурдны тест"
+              >
+                ⚡ <span className="hidden sm:inline">Хурдаа шалгах</span><span className="sm:hidden">Хурд</span>
+              </Link>
               <ThemeToggle />
             </div>
           </div>
