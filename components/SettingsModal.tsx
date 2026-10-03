@@ -45,6 +45,7 @@ const ALPHABET: Array<[string, string, string]> = [
   ["sh", "ш", "Ш"],
   ["shch", "щ", "Щ"],
   ["''", "ъ", "Ъ"],
+  ["yi", "ы", "Ы"],
   ["'", "ь", "Ь"],
   ["e", "э", "Э"],
   ["yu", "ю", "Ю"],
@@ -62,6 +63,7 @@ const SPECIAL: Array<[string, string]> = [
   ["ai", "ай"],
   ["oi", "ой"],
   ["ui", "уй"],
+  ["wi", "үй"],
   ["ei", "эй"],
 ];
 
@@ -267,6 +269,12 @@ export default function SettingsModal({ open, onClose }: Props) {
                     <MappingCell key={latin} latin={latin} cyrillic={cyr} />
                   ))}
                 </div>
+                <p className="mt-3 text-xs text-black/60 dark:text-white/60 leading-relaxed">
+                  Хоёр үсэг нийлэх ёсгүй бол дунд нь{" "}
+                  <code className="font-mono text-[#1D9E75]">_</code> тавина:{" "}
+                  <span className="font-mono">unt_san</span> → унтсан,{" "}
+                  <span className="font-mono">mart_san</span> → мартсан.
+                </p>
               </section>
 
               {/* Latin escape syntax */}

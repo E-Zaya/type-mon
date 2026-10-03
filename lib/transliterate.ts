@@ -1,12 +1,14 @@
 /**
  * TypeMon — Mongolian Romanization to Cyrillic Transliterator
- * 
+ *
  * Key mappings decided by Zaya:
  *   Q → Ө,  W → Ү
  *   J → Ж,  H → Х,  SH → Ш,  CH → Ч,  TS → Ц
  *   AI → АЙ, OI → ОЙ, UI → УЙ, WI → ҮЙ
  *   AA → АА (long vowels by doubling)
- *   ' → Ь,  '' → Ъ
+ *   YI → Ы
+ *   ' → Ь,  '' → Ъ   (the curly ’ ‘ that phones insert count as ')
+ *   _ between two letters → nothing; it keeps a digraph apart (unt_san → унтсан)
  */
 
 type Mapping = [string, string];
@@ -16,7 +18,6 @@ type Mapping = [string, string];
  * All cyrillic values are lowercase; casing is applied dynamically.
  */
 const MULTI_CHAR_MAP: Mapping[] = [
-  ["''", 'ъ'],
   ['shch', 'щ'],
   ['sh', 'ш'],
   ['ch', 'ч'],
@@ -26,6 +27,7 @@ const MULTI_CHAR_MAP: Mapping[] = [
   ['ya', 'я'],
   ['yo', 'ё'],
   ['ye', 'е'],
+  ['yi', 'ы'],
   ['aa', 'аа'],
   ['ee', 'ээ'],
   ['oo', 'оо'],
@@ -49,8 +51,20 @@ const SINGLE_CHAR_MAP: Record<string, string> = {
   j: 'ж', z: 'з', i: 'и', y: 'й', k: 'к', l: 'л',
   m: 'м', n: 'н', o: 'о', q: 'ө', p: 'п', r: 'р',
   s: 'с', t: 'т', u: 'у', f: 'ф', h: 'х', w: 'ү',
-  x: 'х', c: 'ц', "'": 'ь',
+  x: 'х', c: 'ц',
 };
+
+/** Straight apostrophe plus the curly quotes iOS/Android "smart punctuation" substitutes for it. */
+const APOSTROPHES = new Set(["'", '’', '‘']);
+
+/** Typed between two letters to stop them forming a digraph. Dropped from the output. */
+const SEPARATOR = '_';
+
+const isLatinLetter = (ch: string | undefined): boolean =>
+  ch !== undefined && /[a-zA-Z]/.test(ch);
+
+const isWordChar = (ch: string | undefined): boolean =>
+  ch !== undefined && (isLatinLetter(ch) || APOSTROPHES.has(ch) || ch === SEPARATOR);
 
 /**
  * Apply casing from the original romanized slice to the cyrillic output.
@@ -72,38 +86,65 @@ function applyCase(cyrLower: string, origSlice: string): string {
 }
 
 /**
+ * Is the word starting at `start` written in ALL CAPS?
+ * Needs at least two letters so that a lone capital ("A", "I") stays title case.
+ * Decides the case of Ь/Ъ, which have no letter of their own in the input.
+ */
+function isAllCapsWord(text: string, start: number): boolean {
+  let letters = 0;
+  for (let j = start; j < text.length && isWordChar(text[j]); j++) {
+    const ch = text[j];
+    if (/[a-z]/.test(ch)) return false;
+    if (/[A-Z]/.test(ch)) letters++;
+  }
+  return letters >= 2;
+}
+
+/**
  * Convert a chunk of latin text into cyrillic.
  * Internal helper — does NOT understand the *...* escape syntax.
  */
 function transliterateChunk(text: string): string {
   let result = '';
   let i = 0;
-  const lower = text.toLowerCase();
+  // ASCII-only lowercase keeps indices aligned with `text`
+  // (String#toLowerCase can change the length for letters like İ).
+  const lower = text.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  let wordUpper = false;
 
   while (i < text.length) {
     const ch = text[i];
 
-    // Pass through whitespace and newlines unchanged
-    if (ch === ' ' || ch === '\n' || ch === '\r') {
-      result += ch;
+    // Word boundary: decide once per word whether it is ALL CAPS.
+    if (isWordChar(ch) && !isWordChar(text[i - 1])) {
+      wordUpper = isAllCapsWord(text, i);
+    }
+
+    // Separator between two letters: drop it, nothing else.
+    if (ch === SEPARATOR) {
+      if (!(isLatinLetter(text[i - 1]) && isLatinLetter(text[i + 1]))) result += ch;
       i++;
       continue;
     }
 
-    // Handle '' (double apostrophe → Ъ) before single apostrophe
-    if (ch === "'" && text[i + 1] === "'") {
-      result += 'ъ';
-      i += 2;
+    // '' → Ъ, ' → Ь (in any mix of straight and curly apostrophes)
+    if (APOSTROPHES.has(ch)) {
+      if (APOSTROPHES.has(text[i + 1])) {
+        result += wordUpper ? 'Ъ' : 'ъ';
+        i += 2;
+      } else {
+        result += wordUpper ? 'Ь' : 'ь';
+        i++;
+      }
       continue;
     }
 
     // Try multi-character mappings first
     let matched = false;
     for (const [rom, cyr] of MULTI_CHAR_MAP) {
-      if (rom === "''") continue; // handled above
       const len = rom.length;
       if (lower.slice(i, i + len) === rom) {
-        result += applyCase(cyr, text.slice(i, i + len));
+        result += wordUpper ? cyr.toUpperCase() : applyCase(cyr, text.slice(i, i + len));
         i += len;
         matched = true;
         break;
@@ -111,8 +152,7 @@ function transliterateChunk(text: string): string {
     }
 
     if (!matched) {
-      const lch = lower[i];
-      const cyr = SINGLE_CHAR_MAP[lch];
+      const cyr = SINGLE_CHAR_MAP[lower[i]];
       result += cyr ? applyCase(cyr, ch) : ch;
       i++;
     }
@@ -188,6 +228,8 @@ export function transliterateSegments(text: string): Segment[] {
  * transliterate('Sain baina uu')               // → 'Сайн байна уу'
  * transliterate('MONGOL')                      // → 'МОНГОЛ'
  * transliterate("gov'")                        // → 'говь'
+ * transliterate('mongolyin')                   // → 'монголын'
+ * transliterate('unt_san')                     // → 'унтсан'
  * transliterate('Minii mergejil *Programmer*') // → 'Миний мэргэжил Programmer'
  */
 export function transliterate(text: string): string {
