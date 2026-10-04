@@ -251,6 +251,8 @@ export default function TypeMonEditor({
             ? `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`
             : code === "NOT_CONFIGURED"
             ? "Үйлчилгээ тохируулагдаагүй байна."
+            : code === "QUOTA_EXCEEDED"
+            ? "Өнөөдрийн AI засварын хязгаарт хүрлээ. Маргааш дахин оролдоно уу."
             : "Алдаа гарлаа. Дахин оролдоно уу.";
         setPolish({ kind: "error", message });
         return;

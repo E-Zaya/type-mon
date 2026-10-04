@@ -8,7 +8,12 @@
  *
  * Response (failure):
  *   400 { ok: false, error: "INVALID_INPUT" | "TOO_LONG" }
+ *   429 { ok: false, error: "QUOTA_EXCEEDED", remaining: 0, resetAt: string }
  *   500 { ok: false, error: "UPSTREAM_ERROR" | "NOT_CONFIGURED" }
+ *
+ * Quota: POLISH_DAILY_LIMIT polishes per browser per day, counted in a
+ * signed cookie (lib/polish-quota.ts). Every response that reached Gemini
+ * carries the updated cookie and, on success, `remaining`.
  *
  * Notes:
  * - Runs on the default Node.js runtime for the official Google Gen AI SDK.
@@ -25,6 +30,14 @@ import {
   POLISH_RESPONSE_SCHEMA,
   type PolishResult,
 } from "@/lib/polish-prompt";
+import {
+  POLISH_DAILY_LIMIT,
+  POLISH_QUOTA_COOKIE,
+  parseQuota,
+  quotaCookieHeader,
+  quotaResetAt,
+  readCookie,
+} from "@/lib/polish-quota";
 
 export const runtime = "nodejs";
 // Always run at request time — we read headers and call an external API.
@@ -66,6 +79,31 @@ export async function POST(request: Request): Promise<Response> {
       { status: 500 }
     );
   }
+
+  // ---- 3. Daily quota (signed cookie) ----------------------------------
+  // The cookie is signed with its own secret when one is set, otherwise with
+  // the API key, which is already secret and always present at this point.
+  const quotaSecret = process.env.POLISH_QUOTA_SECRET || apiKey;
+  const quota = parseQuota(
+    readCookie(request.headers.get("cookie"), POLISH_QUOTA_COOKIE),
+    quotaSecret
+  );
+  if (quota.used >= POLISH_DAILY_LIMIT) {
+    return Response.json(
+      { ok: false, error: "QUOTA_EXCEEDED", remaining: 0, resetAt: quotaResetAt() },
+      { status: 429 }
+    );
+  }
+  // Count the call now: whatever Gemini answers, a request was spent.
+  const spent = { day: quota.day, used: quota.used + 1 };
+  const remaining = POLISH_DAILY_LIMIT - spent.used;
+  const setCookie = quotaCookieHeader(
+    spent,
+    quotaSecret,
+    process.env.NODE_ENV === "production"
+  );
+  const withCookie = (body: unknown, init?: ResponseInit) =>
+    Response.json(body, { ...init, headers: { "Set-Cookie": setCookie } });
 
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -126,15 +164,16 @@ export async function POST(request: Request): Promise<Response> {
           .filter((c) => c.before.trim() !== c.after.trim())
       : [];
 
-    return Response.json({
+    return withCookie({
       ok: true,
       polished,
       changes,
+      remaining,
     });
   } catch (err) {
     // Don't leak stack traces / API messages to the client.
     console.error("[/api/polish] Gemini call failed:", err);
-    return Response.json(
+    return withCookie(
       { ok: false, error: "UPSTREAM_ERROR" },
       { status: 500 }
     );

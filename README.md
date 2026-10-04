@@ -29,13 +29,17 @@ Copy `.env.local.example` to `.env.local` and fill it in:
 
 ```
 GEMINI_API_KEY=...               # https://aistudio.google.com/apikey
+POLISH_QUOTA_SECRET=...          # optional; signs the quota cookie (falls back to the API key)
 ```
 
 ### Limits
 
 - 500 characters per request (server + client enforced)
+- 10 polishes per browser per day, counted in a signed HttpOnly cookie
+  (`tm_polish`); the day resets at midnight Ulaanbaatar time. Over the limit
+  the API answers `429 QUOTA_EXCEEDED`.
 
-Constants live in `lib/polish-prompt.ts`.
+Constants live in `lib/polish-prompt.ts` and `lib/polish-quota.ts`.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
