@@ -12,23 +12,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
 import SettingsModal from "@/components/SettingsModal";
-import { POLISH_MAX_CHARS, type PolishChange } from "@/lib/polish-prompt";
-import { diffWords, type DiffToken } from "@/lib/polish-diff";
+import PolishPanel from "@/components/polish/PolishPanel";
+import SparkleIcon from "@/components/polish/SparkleIcon";
+import { POLISH_MAX_CHARS } from "@/lib/polish-prompt";
+import { POLISH_MESSAGES, requestPolish, type PolishStatus } from "@/lib/polish-client";
 
 const HISTORY_KEY = "typemon-history";
 const HISTORY_MAX = 5;
-
-type PolishStatus =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | {
-      kind: "done";
-      /** The cyrillic text that was sent — used to detect "same input, skip API". */
-      source: string;
-      polished: string;
-      changes: PolishChange[];
-    }
-  | { kind: "error"; message: string };
 
 type Props = {
   /**
@@ -109,7 +99,6 @@ export default function TypeMonEditor({
   // snapshot keeps SSR markup stable ("Ctrl").
   const mac = useSyncExternalStore(subscribeNever, isMac, () => false);
   const [polish, setPolish] = useState<PolishStatus>({ kind: "idle" });
-  const [polishCopied, setPolishCopied] = useState(false);
   const [polishApplied, setPolishApplied] = useState(false);
   const [polishShowChanges, setPolishShowChanges] = useState(false);
   const online = useSyncExternalStore(
@@ -120,7 +109,6 @@ export default function TypeMonEditor({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const polishCopyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Focus the input on mount. Loading a history item remounts the editor
   // (the parent changes `key`), so this also runs then.
@@ -197,20 +185,14 @@ export default function TypeMonEditor({
 
   const handlePolish = useCallback(async () => {
     if (!online) {
-      setPolish({
-        kind: "error",
-        message: "Интернетгүй үед AI засвар ажиллахгүй. Үндсэн хөрвүүлэлт офлайнаар ажиллана.",
-      });
+      setPolish({ kind: "error", message: POLISH_MESSAGES.offline });
       return;
     }
 
     const source = cyrillic.trim();
     if (!source) return;
     if (source.length > POLISH_MAX_CHARS) {
-      setPolish({
-        kind: "error",
-        message: `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`,
-      });
+      setPolish({ kind: "error", message: POLISH_MESSAGES.tooLong });
       return;
     }
 
@@ -223,61 +205,8 @@ export default function TypeMonEditor({
     setPolishApplied(false);
     setPolishShowChanges(false);
 
-    try {
-      const res = await fetch("/api/polish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: source }),
-      });
-
-      const data = (await res.json().catch(() => null)) as
-        | {
-            ok: boolean;
-            polished?: string;
-            changes?: PolishChange[];
-            error?: string;
-          }
-        | null;
-
-      if (!res.ok || !data?.ok || !data.polished) {
-        const code = data?.error ?? "UPSTREAM_ERROR";
-        const message =
-          code === "TOO_LONG"
-            ? `Уртаа хэтэрсэн байна (${POLISH_MAX_CHARS} тэмдэгтээс багатай байх ёстой).`
-            : code === "NOT_CONFIGURED"
-            ? "Үйлчилгээ тохируулагдаагүй байна."
-            : code === "QUOTA_EXCEEDED"
-            ? "Өнөөдрийн AI засварын хязгаарт хүрлээ. Маргааш дахин оролдоно уу."
-            : "Алдаа гарлаа. Дахин оролдоно уу.";
-        setPolish({ kind: "error", message });
-        return;
-      }
-
-      setPolish({
-        kind: "done",
-        source,
-        polished: data.polished,
-        changes: data.changes ?? [],
-      });
-    } catch {
-      setPolish({
-        kind: "error",
-        message: "Сүлжээний алдаа гарлаа. Дахин оролдоно уу.",
-      });
-    }
+    setPolish(await requestPolish(source));
   }, [cyrillic, online, polish]);
-
-  const handlePolishedCopy = useCallback(async () => {
-    if (polish.kind !== "done") return;
-    try {
-      await navigator.clipboard.writeText(polish.polished);
-      setPolishCopied(true);
-      if (polishCopyTimeoutRef.current) clearTimeout(polishCopyTimeoutRef.current);
-      polishCopyTimeoutRef.current = setTimeout(() => setPolishCopied(false), 2000);
-    } catch {
-      /* swallow */
-    }
-  }, [polish]);
 
   /** "Хэрэглэх" — save the polished result to history. */
   const handlePolishApply = useCallback(() => {
@@ -375,7 +304,6 @@ export default function TypeMonEditor({
     return () => {
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      if (polishCopyTimeoutRef.current) clearTimeout(polishCopyTimeoutRef.current);
     };
   }, []);
 
@@ -643,162 +571,14 @@ export default function TypeMonEditor({
         <StatPill label="ҮГ/МИН" value={wpm} />
       </div>
 
-      {/* Polish result panel — only shown when there's something to show */}
-      <AnimatePresence initial={false}>
-        {polish.kind !== "idle" && (
-          <motion.div
-            key={polish.kind}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-            className="
-              relative
-              bg-[#1D9E75]/[0.04] dark:bg-[#1D9E75]/[0.06]
-              border border-[#1D9E75]/25 dark:border-[#1D9E75]/30
-              rounded-xl p-4
-            "
-          >
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-[11px] text-[#1D9E75] uppercase tracking-widest font-medium inline-flex items-center gap-1.5">
-                <SparkleIcon />
-                AI ЗАСВАР
-              </label>
-              {polish.kind === "done" && (
-                <div className="flex items-center gap-1.5">
-                  {polish.changes.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setPolishShowChanges((v) => !v)}
-                      className="
-                        text-[11px] px-2 py-1 rounded-md
-                        bg-white/60 dark:bg-black/30
-                        border border-black/10 dark:border-white/10
-                        text-black/70 hover:text-black
-                        dark:text-white/70 dark:hover:text-white
-                        transition-colors duration-150
-                      "
-                    >
-                      {polishShowChanges ? "Тайлбарыг хаах" : `Тайлбар (${polish.changes.length})`}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handlePolishedCopy}
-                    className="
-                      text-[11px] px-2 py-1 rounded-md
-                      bg-white/60 dark:bg-black/30
-                      border border-black/10 dark:border-white/10
-                      text-black/70 hover:text-black
-                      dark:text-white/70 dark:hover:text-white
-                      transition-colors duration-150
-                    "
-                  >
-                    {polishCopied ? "Хууллаа ✓" : "Хуулах"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePolishApply}
-                    disabled={polishApplied}
-                    className="
-                      text-[11px] px-2 py-1 rounded-md
-                      bg-[#1D9E75] hover:bg-[#178b66]
-                      border border-[#1D9E75]
-                      text-white font-medium
-                      transition-colors duration-150
-                      disabled:opacity-60 disabled:cursor-not-allowed
-                      disabled:hover:bg-[#1D9E75]
-                    "
-                  >
-                    {polishApplied ? "Хадгалсан ✓" : "Хэрэглэх"}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {polish.kind === "loading" && (
-              <div className="space-y-2" aria-label="AI магадлан засаж байна">
-                <SkeletonLine widthClass="w-11/12" />
-                <SkeletonLine widthClass="w-9/12" />
-                <SkeletonLine widthClass="w-10/12" />
-              </div>
-            )}
-
-            {polish.kind === "done" && (
-              <div className="space-y-3">
-                {/* When nothing changed, show a friendly note + the text. */}
-                {polish.changes.length === 0 ||
-                polish.polished.trim() === polish.source.trim() ? (
-                  <>
-                    <p className="text-[11px] text-black/60 dark:text-white/60">
-                      Засах зүйл олдсонгүй. Бичсэн нь зөв байна.
-                    </p>
-                    <p className="text-base leading-relaxed text-black/90 dark:text-white/90 whitespace-pre-wrap break-words">
-                      {polish.polished}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    {/* Before/after diff view */}
-                    <DiffView source={polish.source} polished={polish.polished} />
-
-                    {/* Per-change explanations, collapsed by default */}
-                    <AnimatePresence initial={false}>
-                      {polishShowChanges && (
-                        <motion.ul
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.18 }}
-                          className="
-                            mt-1 pt-3 border-t border-[#1D9E75]/20
-                            space-y-1.5 text-xs text-black/70 dark:text-white/70
-                            overflow-hidden
-                          "
-                        >
-                          {polish.changes.map((c, i) => (
-                            <li key={i} className="leading-relaxed">
-                              <span className="line-through opacity-60">{c.before}</span>
-                              <span className="mx-1.5 text-black/40 dark:text-white/40">→</span>
-                              <span className="text-[#1D9E75] font-medium">{c.after}</span>
-                              <span className="text-black/50 dark:text-white/50">
-                                {" "}— {c.reason}
-                              </span>
-                            </li>
-                          ))}
-                        </motion.ul>
-                      )}
-                    </AnimatePresence>
-                  </>
-                )}
-              </div>
-            )}
-
-            {polish.kind === "error" && (
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm text-red-600 dark:text-red-400 flex-1">
-                  {polish.message}
-                </p>
-                <button
-                  type="button"
-                  onClick={handlePolishRetry}
-                  className="
-                    text-[11px] px-2 py-1 rounded-md
-                    bg-white/60 dark:bg-black/30
-                    border border-black/10 dark:border-white/10
-                    text-black/70 hover:text-black
-                    dark:text-white/70 dark:hover:text-white
-                    transition-colors duration-150
-                    shrink-0
-                  "
-                >
-                  Дахин оролдох
-                </button>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <PolishPanel
+        status={polish}
+        showChanges={polishShowChanges}
+        onToggleChanges={() => setPolishShowChanges((v) => !v)}
+        applied={polishApplied}
+        onApply={handlePolishApply}
+        onRetry={handlePolishRetry}
+      />
 
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -812,111 +592,6 @@ function StatPill({ label, value }: { label: string; value: number }) {
       <span>{label}</span>
       <span className="font-mono text-black/70 dark:text-white/70 tabular-nums">{value}</span>
     </span>
-  );
-}
-
-function DiffView({ source, polished }: { source: string; polished: string }) {
-  // Memoize: diff is O(n*m) and we don't want it re-running on every parent
-  // render (e.g. when the user types in the textarea while the panel is open).
-  const { beforeTokens, afterTokens } = useMemo(
-    () => diffWords(source, polished),
-    [source, polished]
-  );
-  return (
-    <div className="grid grid-cols-1 gap-2">
-      <div>
-        <div className="text-[10px] text-black/40 dark:text-white/40 uppercase tracking-widest mb-1">
-          Анхны
-        </div>
-        <p className="text-sm leading-relaxed text-black/60 dark:text-white/50 whitespace-pre-wrap break-words">
-          <DiffTokens tokens={beforeTokens} mode="before" />
-        </p>
-      </div>
-      <div>
-        <div className="text-[10px] text-[#1D9E75] uppercase tracking-widest mb-1">
-          Засагдсан
-        </div>
-        <p className="text-base leading-relaxed text-black/90 dark:text-white/90 whitespace-pre-wrap break-words">
-          <DiffTokens tokens={afterTokens} mode="after" />
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function DiffTokens({
-  tokens,
-  mode,
-}: {
-  tokens: DiffToken[];
-  mode: "before" | "after";
-}) {
-  return (
-    <>
-      {tokens.map((t, i) => {
-        if (t.kind === "same") return <span key={i}>{t.text}</span>;
-        if (mode === "before" && t.kind === "removed") {
-          return (
-            <span
-              key={i}
-              className="
-                line-through decoration-red-500/60 decoration-2
-                bg-red-500/[0.08] dark:bg-red-500/[0.12]
-                rounded px-0.5
-              "
-            >
-              {t.text}
-            </span>
-          );
-        }
-        if (mode === "after" && t.kind === "added") {
-          return (
-            <span
-              key={i}
-              className="
-                bg-[#1D9E75]/[0.18] dark:bg-[#1D9E75]/[0.28]
-                text-[#1D9E75]
-                rounded px-0.5 font-medium
-              "
-            >
-              {t.text}
-            </span>
-          );
-        }
-        return null;
-      })}
-    </>
-  );
-}
-
-function SkeletonLine({ widthClass }: { widthClass: string }) {
-  return (
-    <div
-      className={`
-        h-3 rounded ${widthClass}
-        bg-black/10 dark:bg-white/10
-        animate-pulse
-      `}
-    />
-  );
-}
-
-function SparkleIcon({ spinning = false }: { spinning?: boolean }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      className={spinning ? "animate-spin" : undefined}
-    >
-      <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
-    </svg>
   );
 }
 
