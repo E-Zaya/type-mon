@@ -32,13 +32,13 @@ const ALPHABET: Array<[string, string, string]> = [
   ["m", "м", "М"],
   ["n", "н", "Н"],
   ["o", "о", "О"],
-  ["q", "ө", "Ө"],
+  ["q / ö", "ө", "Ө"],
   ["p", "п", "П"],
   ["r", "р", "Р"],
   ["s", "с", "С"],
   ["t", "т", "Т"],
   ["u", "у", "У"],
-  ["w", "ү", "Ү"],
+  ["w / ü", "ү", "Ү"],
   ["f", "ф", "Ф"],
   ["h / x", "х", "Х"],
   ["c / ts", "ц", "Ц"],
@@ -258,6 +258,12 @@ export default function SettingsModal({ open, onClose }: Props) {
                     />
                   ))}
                 </div>
+                <p className="mt-3 text-xs text-black/60 dark:text-white/60 leading-relaxed">
+                  <code className="font-mono text-[#1D9E75]">e</code> нь э,{" "}
+                  <code className="font-mono text-[#1D9E75]">ye</code> нь е:{" "}
+                  <span className="font-mono">yerqnhii</span> → ерөнхий,{" "}
+                  <span className="font-mono">mergejil</span> → мэргэжил.
+                </p>
               </section>
 
               {/* Special section */}

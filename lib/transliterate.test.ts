@@ -47,6 +47,19 @@ test("ы is typed as yi", () => {
   assert.equal(transliterate("yiy"), "ый");
 });
 
+test("ö and ü (MNS romanization) work like q and w", () => {
+  assert.equal(transliterate("Mönh"), "Мөнх");
+  assert.equal(transliterate("önöödör"), "өнөөдөр");
+  assert.equal(transliterate("ügüi"), "үгүй");
+  assert.equal(transliterate("ÜNEN"), "ҮНЭН");
+  assert.equal(transliterate("Ö"), "Ө");
+  assert.equal(transliterate("GOV’ ÜÜ"), "ГОВЬ ҮҮ");
+  // Decomposed input (o + combining diaeresis) is composed first
+  assert.equal(transliterate("mönh"), "мөнх");
+  // Still a letter for the separator rule
+  assert.equal(transliterate("ö_i"), "өи");
+});
+
 test("_ between two letters splits a digraph and is dropped", () => {
   assert.equal(transliterate("unt_san"), "унтсан");
   assert.equal(transliterate("mart_san"), "мартсан");

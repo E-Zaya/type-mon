@@ -7,6 +7,7 @@
  *   AI → АЙ, OI → ОЙ, UI → УЙ, WI → ҮЙ
  *   AA → АА (long vowels by doubling)
  *   YI → Ы
+ *   Ö → Ө, Ü → Ү      (for people used to the MNS 5217 romanization)
  *   ' → Ь,  '' → Ъ   (the curly ’ ‘ that phones insert count as ')
  *   _ between two letters → nothing; it keeps a digraph apart (unt_san → унтсан)
  */
@@ -37,6 +38,7 @@ const MULTI_CHAR_MAP: Mapping[] = [
   ['oi', 'ой'],
   ['ui', 'уй'],
   ['wi', 'үй'],
+  ['üi', 'үй'],
   ['ei', 'эй'],
   ['ii', 'ий'],
   ['uu', 'уу'],
@@ -51,8 +53,13 @@ const SINGLE_CHAR_MAP: Record<string, string> = {
   j: 'ж', z: 'з', i: 'и', y: 'й', k: 'к', l: 'л',
   m: 'м', n: 'н', o: 'о', q: 'ө', p: 'п', r: 'р',
   s: 'с', t: 'т', u: 'у', f: 'ф', h: 'х', w: 'ү',
-  x: 'х', c: 'ц',
+  x: 'х', c: 'ц', ö: 'ө', ü: 'ү',
 };
+
+/** Latin letters the tables understand, in both cases. */
+const LETTER = /[a-zA-ZöüÖÜ]/;
+const LOWER = /[a-zöü]/;
+const UPPER = /[A-ZÖÜ]/;
 
 /** Straight apostrophe plus the curly quotes iOS/Android "smart punctuation" substitutes for it. */
 const APOSTROPHES = new Set(["'", '’', '‘']);
@@ -61,7 +68,7 @@ const APOSTROPHES = new Set(["'", '’', '‘']);
 const SEPARATOR = '_';
 
 const isLatinLetter = (ch: string | undefined): boolean =>
-  ch !== undefined && /[a-zA-Z]/.test(ch);
+  ch !== undefined && LETTER.test(ch);
 
 const isWordChar = (ch: string | undefined): boolean =>
   ch !== undefined && (isLatinLetter(ch) || APOSTROPHES.has(ch) || ch === SEPARATOR);
@@ -73,13 +80,13 @@ const isWordChar = (ch: string | undefined): boolean =>
  * - All lowercase → all lowercase                  (sain → сайн)
  */
 function applyCase(cyrLower: string, origSlice: string): string {
-  const hasLetter = /[a-zA-Z]/.test(origSlice);
+  const hasLetter = LETTER.test(origSlice);
   if (!hasLetter) return cyrLower;
 
-  const allUpper = !/[a-z]/.test(origSlice) && /[A-Z]/.test(origSlice);
+  const allUpper = !LOWER.test(origSlice) && UPPER.test(origSlice);
   if (allUpper) return cyrLower.toUpperCase();
 
-  const firstUpper = /[A-Z]/.test(origSlice[0]);
+  const firstUpper = UPPER.test(origSlice[0]);
   if (firstUpper) return cyrLower.charAt(0).toUpperCase() + cyrLower.slice(1);
 
   return cyrLower;
@@ -94,8 +101,8 @@ function isAllCapsWord(text: string, start: number): boolean {
   let letters = 0;
   for (let j = start; j < text.length && isWordChar(text[j]); j++) {
     const ch = text[j];
-    if (/[a-z]/.test(ch)) return false;
-    if (/[A-Z]/.test(ch)) letters++;
+    if (LOWER.test(ch)) return false;
+    if (UPPER.test(ch)) letters++;
   }
   return letters >= 2;
 }
@@ -107,9 +114,9 @@ function isAllCapsWord(text: string, start: number): boolean {
 function transliterateChunk(text: string): string {
   let result = '';
   let i = 0;
-  // ASCII-only lowercase keeps indices aligned with `text`
+  // Lowercase only the letters we map, so indices stay aligned with `text`
   // (String#toLowerCase can change the length for letters like İ).
-  const lower = text.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  const lower = text.replace(/[A-ZÖÜ]/g, (c) => c.toLowerCase());
   let wordUpper = false;
 
   while (i < text.length) {
@@ -177,7 +184,10 @@ export type Segment = {
  *
  * Returns an array of segments so the UI can highlight literal sections.
  */
-export function transliterateSegments(text: string): Segment[] {
+export function transliterateSegments(input: string): Segment[] {
+  // Some keyboards produce ö as "o" + combining diaeresis; compose first so
+  // the tables see one character.
+  const text = input.normalize('NFC');
   const segments: Segment[] = [];
 
   // Find all matched *...* pairs. Greedy from left.
