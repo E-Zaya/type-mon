@@ -56,6 +56,8 @@ test("ö and ü (MNS romanization) work like q and w", () => {
   assert.equal(transliterate("GOV’ ÜÜ"), "ГОВЬ ҮҮ");
   // Decomposed input (o + combining diaeresis) is composed first
   assert.equal(transliterate("mönh"), "мөнх");
+  // ...but literal sections are returned byte-for-byte
+  assert.equal(transliterate("*ö*"), "ö");
   // Still a letter for the separator rule
   assert.equal(transliterate("ö_i"), "өи");
 });

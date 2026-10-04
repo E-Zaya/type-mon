@@ -9,14 +9,16 @@
  * the cache name makes the activate step below drop the old cache.
  *
  * Rendered once at build time (force-static), so the id is stable for the
- * lifetime of a deployment. On Vercel it is the commit SHA; elsewhere the
- * build timestamp.
+ * lifetime of a deployment. On Vercel it is the deployment id (unique even
+ * for a redeploy of the same commit); elsewhere the build timestamp.
  */
 
 export const dynamic = "force-static";
 
 const BUILD_ID =
-  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? Date.now().toString(36);
+  process.env.VERCEL_DEPLOYMENT_ID ||
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ||
+  Date.now().toString(36);
 
 const SW_SOURCE = String.raw`
 const CACHE_NAME = "typemon-pwa-${BUILD_ID}";

@@ -48,7 +48,7 @@ Plus に「履歴クラウド同期」「用途別トーン（丁寧/カジュ�
 - `payment_orders(id, user_id, plan_code, amount_mnt, provider demo|qpay, provider_ref, status pending|paid|expired, expires_at, paid_at, created_at)`
 - `ai_usage(id, user_id, route, model, prompt_tokens, output_tokens, latency_ms, ok, error_code, created_at)` — Memorio 0010 をそのまま。月の回数 = 当月行数
 - RLS: 本人のみ select、insert はサーバー（service role）
-- ゲスト枠: `tm_guest` Cookie に `{day, count}` を HMAC 署名して保存。DB なし
+- ゲスト枠: `tm_polish` Cookie に `{day, used}` を HMAC 署名して保存（`lib/polish-quota.ts` に実装済み）。DB なし
 
 ### API とゲート
 

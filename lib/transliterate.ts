@@ -111,7 +111,10 @@ function isAllCapsWord(text: string, start: number): boolean {
  * Convert a chunk of latin text into cyrillic.
  * Internal helper — does NOT understand the *...* escape syntax.
  */
-function transliterateChunk(text: string): string {
+function transliterateChunk(input: string): string {
+  // Some keyboards produce ö as "o" + combining diaeresis; compose first so
+  // the tables see one character. Only here, so *...* stays verbatim.
+  const text = input.normalize('NFC');
   let result = '';
   let i = 0;
   // Lowercase only the letters we map, so indices stay aligned with `text`
@@ -184,10 +187,7 @@ export type Segment = {
  *
  * Returns an array of segments so the UI can highlight literal sections.
  */
-export function transliterateSegments(input: string): Segment[] {
-  // Some keyboards produce ö as "o" + combining diaeresis; compose first so
-  // the tables see one character.
-  const text = input.normalize('NFC');
+export function transliterateSegments(text: string): Segment[] {
   const segments: Segment[] = [];
 
   // Find all matched *...* pairs. Greedy from left.

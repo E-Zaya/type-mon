@@ -11,7 +11,7 @@
  * Server-only: uses node:crypto.
  */
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 /** Polishes allowed per browser per day. */
 export const POLISH_DAILY_LIMIT = 10;
@@ -45,6 +45,15 @@ export function quotaResetAt(now: number = Date.now()): string {
     shifted.getUTCDate() + 1
   );
   return new Date(nextMidnightShifted - DAY_OFFSET_MS).toISOString();
+}
+
+/**
+ * The HMAC key: POLISH_QUOTA_SECRET when set, otherwise a hash derived from
+ * the Gemini key so that key is never used directly as a MAC key.
+ */
+export function deriveQuotaSecret(configured: string | undefined, apiKey: string): string {
+  if (configured) return configured;
+  return createHash("sha256").update(`tm-quota:${apiKey}`).digest("base64url");
 }
 
 function sign(payload: string, secret: string): string {

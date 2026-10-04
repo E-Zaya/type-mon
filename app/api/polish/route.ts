@@ -33,6 +33,7 @@ import {
 import {
   POLISH_DAILY_LIMIT,
   POLISH_QUOTA_COOKIE,
+  deriveQuotaSecret,
   parseQuota,
   quotaCookieHeader,
   quotaResetAt,
@@ -81,9 +82,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // ---- 3. Daily quota (signed cookie) ----------------------------------
-  // The cookie is signed with its own secret when one is set, otherwise with
-  // the API key, which is already secret and always present at this point.
-  const quotaSecret = process.env.POLISH_QUOTA_SECRET || apiKey;
+  // Signed with its own secret when one is set, otherwise with a value
+  // derived from the API key (never the key itself).
+  const quotaSecret = deriveQuotaSecret(process.env.POLISH_QUOTA_SECRET, apiKey);
   const quota = parseQuota(
     readCookie(request.headers.get("cookie"), POLISH_QUOTA_COOKIE),
     quotaSecret
@@ -136,7 +137,7 @@ export async function POST(request: Request): Promise<Response> {
       parsed = JSON.parse(cleaned) as PolishResult;
     } catch (parseErr) {
       console.error("[/api/polish] JSON parse failed. Raw:", raw, parseErr);
-      return Response.json(
+      return withCookie(
         { ok: false, error: "UPSTREAM_ERROR" },
         { status: 500 }
       );
@@ -144,7 +145,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const polished = cleanPolishedOutput(parsed.polished ?? "");
     if (!polished) {
-      return Response.json(
+      return withCookie(
         { ok: false, error: "UPSTREAM_ERROR" },
         { status: 500 }
       );
