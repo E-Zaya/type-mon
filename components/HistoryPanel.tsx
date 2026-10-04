@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useClientMounted } from "@/lib/use-client-mounted";
 
 const HISTORY_KEY = "typemon-history";
 const HISTORY_MAX = 5;
@@ -53,35 +54,48 @@ function writeHistory(items: HistoryItem[]) {
   }
 }
 
+const EMPTY_HISTORY: HistoryItem[] = [];
+let cachedRaw: string | null = null;
+let cachedItems: HistoryItem[] = EMPTY_HISTORY;
+
+/**
+ * Snapshot for useSyncExternalStore. Must return the same array while the
+ * stored string is unchanged, otherwise React re-renders forever.
+ */
+function historySnapshot(): HistoryItem[] {
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(HISTORY_KEY);
+  } catch {
+    raw = null;
+  }
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
+    cachedItems = readHistory();
+  }
+  return cachedItems;
+}
+
+function subscribeHistory(callback: () => void) {
+  window.addEventListener("typemon-history-change", callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener("typemon-history-change", callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
 export default function HistoryPanel({ onLoad }: Props) {
-  const [items, setItems] = useState<HistoryItem[]>([]);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useClientMounted();
+  const items = useSyncExternalStore(subscribeHistory, historySnapshot, () => EMPTY_HISTORY);
 
-  const refresh = useCallback(() => {
-    setItems(readHistory());
-  }, []);
-
-  useEffect(() => {
-    setMounted(true);
-    refresh();
-    const handler = () => refresh();
-    window.addEventListener("typemon-history-change", handler);
-    window.addEventListener("storage", handler);
-    return () => {
-      window.removeEventListener("typemon-history-change", handler);
-      window.removeEventListener("storage", handler);
-    };
-  }, [refresh]);
-
+  // writeHistory fires "typemon-history-change", which refreshes `items`.
   const handleDelete = useCallback((id: string) => {
-    const next = readHistory().filter((x) => x.id !== id);
-    writeHistory(next);
-    setItems(next);
+    writeHistory(readHistory().filter((x) => x.id !== id));
   }, []);
 
   const handleClearAll = useCallback(() => {
     writeHistory([]);
-    setItems([]);
   }, []);
 
   if (!mounted) {

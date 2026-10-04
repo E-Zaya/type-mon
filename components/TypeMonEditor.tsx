@@ -31,10 +31,11 @@ type PolishStatus =
   | { kind: "error"; message: string };
 
 type Props = {
-  /** Optional ref-like setter so HistoryPanel (or parent) can push values into the editor. */
+  /**
+   * Text placed in the input when the component mounts. To load a new
+   * value (e.g. a history item) the parent changes the component's `key`.
+   */
   initialRoman?: string;
-  /** Bumped by parent to request a re-load of `initialRoman` even if value is identical. */
-  loadToken?: number;
   /** Called whenever history changes so the parent (HistoryPanel) can re-render. */
   onHistoryChange?: (items: HistoryItem[]) => void;
 };
@@ -92,9 +93,10 @@ function getServerOnlineSnapshot(): boolean {
   return true;
 }
 
+const subscribeNever = () => () => {};
+
 export default function TypeMonEditor({
   initialRoman = "",
-  loadToken = 0,
   onHistoryChange,
 }: Props) {
   const [input, setInput] = useState(initialRoman);
@@ -103,7 +105,9 @@ export default function TypeMonEditor({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [mac, setMac] = useState(false);
+  // Platform never changes, so a store with no updates is enough; the server
+  // snapshot keeps SSR markup stable ("Ctrl").
+  const mac = useSyncExternalStore(subscribeNever, isMac, () => false);
   const [polish, setPolish] = useState<PolishStatus>({ kind: "idle" });
   const [polishCopied, setPolishCopied] = useState(false);
   const [polishApplied, setPolishApplied] = useState(false);
@@ -118,21 +122,12 @@ export default function TypeMonEditor({
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const polishCopyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Focus the input on mount. Loading a history item remounts the editor
+  // (the parent changes `key`), so this also runs then.
   useEffect(() => {
-    setMac(isMac());
+    const frame = requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, []);
-
-  // Sync from parent when loadToken bumps
-  useEffect(() => {
-    setInput(initialRoman);
-    setStartedAt(null);
-    setElapsedSec(0);
-    setPolish({ kind: "idle" });
-    setPolishApplied(false);
-    setPolishShowChanges(false);
-    requestAnimationFrame(() => textareaRef.current?.focus());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadToken]);
 
   // Tick timer while typing (for live wpm)
   useEffect(() => {

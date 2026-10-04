@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useClientMounted } from "@/lib/use-client-mounted";
 
 type Props = {
   open: boolean;
@@ -339,14 +340,6 @@ export default function SettingsModal({ open, onClose }: Props) {
       )}
     </AnimatePresence>,
     document.body
-  );
-}
-
-function useClientMounted() {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false
   );
 }
 

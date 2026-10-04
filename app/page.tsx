@@ -11,24 +11,23 @@ const URL_TEXT_MAX = 2000;
 
 function HomeInner() {
   const searchParams = useSearchParams();
-  const [initialRoman, setInitialRoman] = useState("");
+  // ?text=... is read once, during the first render. The effect below only
+  // strips it from the address bar so a reload starts clean.
+  const [initialRoman, setInitialRoman] = useState(
+    () => searchParams?.get("text")?.slice(0, URL_TEXT_MAX) ?? ""
+  );
+  // Bumped to remount the editor with a new `initialRoman`.
   const [loadToken, setLoadToken] = useState(0);
 
-  // Read ?text=... once on mount
   useEffect(() => {
-    const fromUrl = searchParams?.get("text");
-    if (fromUrl) {
-      const safe = fromUrl.slice(0, URL_TEXT_MAX);
-      setInitialRoman(safe);
-      setLoadToken((t) => t + 1);
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.delete("text");
-        const cleaned = url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : "");
-        window.history.replaceState({}, "", cleaned);
-      } catch {
-        /* swallow */
-      }
+    if (!searchParams?.get("text")) return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("text");
+      const cleaned = url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : "");
+      window.history.replaceState({}, "", cleaned);
+    } catch {
+      /* swallow */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -94,7 +93,7 @@ function HomeInner() {
               transition-colors duration-200
             "
           >
-            <TypeMonEditor initialRoman={initialRoman} loadToken={loadToken} />
+            <TypeMonEditor key={loadToken} initialRoman={initialRoman} />
           </section>
 
           <section

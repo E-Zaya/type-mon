@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useClientMounted } from "@/lib/use-client-mounted";
 
 const STORAGE_KEY = "typemon-theme";
 
@@ -26,15 +27,17 @@ function applyTheme(theme: Theme) {
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
+  // On the client the initializer reads localStorage during the first
+  // render. The server value ("dark") is never visible: until mounted the
+  // button is a placeholder that does not depend on the theme.
+  const [theme, setTheme] = useState<Theme>(readTheme);
+  const mounted = useClientMounted();
 
+  // Keep <html> in sync with the state. The inline script in layout.tsx
+  // already set the class before hydration; this covers toggles.
   useEffect(() => {
-    const initial = readTheme();
-    setTheme(initial);
-    applyTheme(initial);
-    setMounted(true);
-  }, []);
+    applyTheme(theme);
+  }, [theme]);
 
   const toggle = useCallback(() => {
     setTheme((prev) => {
@@ -44,7 +47,6 @@ export default function ThemeToggle() {
       } catch {
         /* swallow */
       }
-      applyTheme(next);
       return next;
     });
   }, []);
