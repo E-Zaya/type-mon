@@ -1,4 +1,25 @@
-const CACHE_NAME = "typemon-pwa-v1";
+/**
+ * GET /sw.js — the service worker, served with a cache name that changes
+ * on every build.
+ *
+ * Why a route and not public/sw.js: a fixed cache name ("typemon-pwa-v1")
+ * keeps the previous deployment's HTML in the cache. After a deploy that
+ * HTML asks for /_next/static chunks that no longer exist and the app
+ * renders blank until the user clears site data. Baking the build id into
+ * the cache name makes the activate step below drop the old cache.
+ *
+ * Rendered once at build time (force-static), so the id is stable for the
+ * lifetime of a deployment. On Vercel it is the commit SHA; elsewhere the
+ * build timestamp.
+ */
+
+export const dynamic = "force-static";
+
+const BUILD_ID =
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? Date.now().toString(36);
+
+const SW_SOURCE = String.raw`
+const CACHE_NAME = "typemon-pwa-${BUILD_ID}";
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",
@@ -99,4 +120,16 @@ async function cacheFirst(request) {
     cache.put(request, response.clone());
   }
   return response;
+}
+`.trimStart();
+
+export function GET(): Response {
+  return new Response(SW_SOURCE, {
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
+      // Browsers must re-check the worker on every load so a new build
+      // replaces the old one promptly.
+      "Cache-Control": "no-cache",
+    },
+  });
 }
