@@ -13,9 +13,10 @@
   --border-color: rgba(0, 0, 0, 0.08);
   --accent: #1D9E75;
 
-  /* Stack with strong Cyrillic coverage. Geist often lacks Ү (U+04AE), Ө (U+04E8), Ъ (U+042A). */
+  /* Geist from Google Fonts covers Mongolian Cyrillic (Ө U+04E8, Ү U+04AE),
+     so Cyrillic text uses the same face as the rest of the UI. */
   --font-cyrillic:
-    "Inter", "Segoe UI", "Helvetica Neue", "Noto Sans", "Arial",
+    var(--font-geist-sans), "Segoe UI", "Helvetica Neue", "Noto Sans", "Arial",
     "Apple Color Emoji", sans-serif;
 }
 
@@ -41,10 +42,7 @@ html,
 body {
   background: var(--background);
   color: var(--foreground);
-  /* Cyrillic-friendly fallbacks come BEFORE Geist so Mongolian glyphs render correctly. */
-  font-family:
-    var(--font-geist-sans), "Inter", "Segoe UI", "Helvetica Neue",
-    "Noto Sans", "Arial", sans-serif;
+  font-family: var(--font-cyrillic);
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
