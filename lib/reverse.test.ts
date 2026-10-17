@@ -14,6 +14,11 @@ test("typemon style spells words the way a user types them", () => {
   assert.equal(toLatin("монголын"), "mongolyin");
   assert.equal(toLatin("Ерөнхий"), "Yerqnhii");
   assert.equal(toLatin("йогурт"), "y_ogurt");
+  // й after е/я/ю/ё/ө/ы has no <vowel>i rule, so it stays y
+  assert.equal(toLatin("музей"), "muzyey");
+  assert.equal(toLatin("Сергей"), "Syergyey");
+  assert.equal(toLatin("хөй"), "hqy");
+  assert.equal(toLatin("ый"), "yiy");
 });
 
 test("typemon style inserts _ where the plain spelling would not round-trip", () => {
@@ -26,7 +31,11 @@ test("typemon style inserts _ where the plain spelling would not round-trip", ()
 });
 
 test("typemon style round-trips the corpus and names", () => {
-  const words = [...MN_WORDS, "Батсайхан", "Цогтсайхан", "Батсүх", "Энхтуяа", "Йорк", "Нью-Йорк"];
+  const words = [
+    ...MN_WORDS,
+    "Батсайхан", "Цогтсайхан", "Батсүх", "Батсүүрийн", "Энхтуяа", "Йорк", "Нью-Йорк",
+    "музей", "хоккей", "Сергей", "Андрей", "лицей", "хөй", "яй", "ый", "ёй", "юй",
+  ];
   const failures = words.filter((w) => transliterate(toLatin(w), { builtInExceptions: false }) !== w);
   assert.deepEqual(failures, []);
 });

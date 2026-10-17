@@ -22,20 +22,36 @@ type Mapping = [string, string];
 
 /**
  * A dictionary maps a lowercase Latin word (without `_`) to its lowercase
- * Cyrillic spelling. Entries win over the digraph rules and also match as
- * a prefix, so suffixes still convert normally (batswh → батсүх,
- * batswhiin → батсүхийн).
+ * Cyrillic spelling. Entries win over the digraph rules.
+ *
+ * Built-in EXCEPTIONS also match as a prefix, so suffixes still convert
+ * (batswh → батсүх, batswhiin → батсүхийн). That is safe only because
+ * their keys are curated: a key must not end in a letter that starts a
+ * multi-character rule (see the exceptions test). Caller dictionaries,
+ * which hold whatever the user taught, match whole words only: a learned
+ * "sh" → "сх" must never turn shine into схинэ.
  */
 export type Dictionary = Record<string, string>;
 
 /** Built-in exceptions: words the digraph rules get wrong (унтсан, Батсүх). */
 export const EXCEPTIONS: Dictionary = exceptions.words;
 
+/** Ordered multi-character rules, exported for tests that lint the data. */
+export const MULTI_RULES: ReadonlyArray<readonly [string, string]> = rules.multi as Mapping[];
+
 export type TransliterateOptions = {
-  /** Extra words, e.g. what the user taught the app. Win over EXCEPTIONS. */
+  /** Extra words, e.g. what the user taught the app. Whole-word matches, win over EXCEPTIONS. */
   dictionary?: Dictionary;
   /** false = rules only, no built-in exceptions. For tests and tooling. */
   builtInExceptions?: boolean;
+};
+
+/** What transliterateChunk looks words up in. */
+type Lookup = {
+  /** Whole-word matches (the user's words). */
+  exact: Dictionary;
+  /** Prefix matches (curated exceptions). */
+  prefix: Dictionary;
 };
 
 /** Multi-character mappings — ordered, first match wins. Lowercase values. */
@@ -105,21 +121,23 @@ function caseLikeWord(cyrLower: string, wordSlice: string, wordUpper: boolean): 
 }
 
 /**
- * Longest dictionary key that is a prefix of the word starting at `start`.
- * Only whole letters count: the word must not contain `_` (the user was
- * explicit) and the key must be at least two letters.
+ * Dictionary hit for the word starting at `start`: the whole word in
+ * `exact`, else the longest `prefix` key. A word containing `_` is never
+ * looked up (the user was explicit).
  */
 function dictionaryMatch(
   lower: string,
   start: number,
-  dictionary: Dictionary
+  lookup: Lookup
 ): { len: number; cyr: string } | null {
   let end = start;
   while (end < lower.length && isWordChar(lower[end])) end++;
   const word = lower.slice(start, end);
   if (word.includes(SEPARATOR)) return null;
+  const whole = lookup.exact[word];
+  if (whole !== undefined) return { len: word.length, cyr: whole };
   for (let len = word.length; len >= 2; len--) {
-    const cyr = dictionary[word.slice(0, len)];
+    const cyr = lookup.prefix[word.slice(0, len)];
     if (cyr !== undefined) return { len, cyr };
   }
   return null;
@@ -129,7 +147,7 @@ function dictionaryMatch(
  * Convert a chunk of latin text into cyrillic.
  * Internal helper — does NOT understand the *...* escape syntax.
  */
-function transliterateChunk(input: string, dictionary: Dictionary): string {
+function transliterateChunk(input: string, lookup: Lookup): string {
   // Some keyboards produce ö as "o" + combining diaeresis; compose first so
   // the tables see one character. Only here, so *...* stays verbatim.
   const text = input.normalize('NFC');
@@ -147,7 +165,7 @@ function transliterateChunk(input: string, dictionary: Dictionary): string {
     // whether the dictionary knows (the start of) this word.
     if (isWordChar(ch) && !isWordChar(text[i - 1])) {
       wordUpper = isAllCapsWord(text, i);
-      const hit = dictionaryMatch(lower, i, dictionary);
+      const hit = dictionaryMatch(lower, i, lookup);
       if (hit) {
         result += caseLikeWord(hit.cyr, text.slice(i, i + hit.len), wordUpper);
         i += hit.len;
@@ -218,8 +236,10 @@ export function transliterateSegments(
   text: string,
   options: TransliterateOptions = {}
 ): Segment[] {
-  const base = options.builtInExceptions === false ? {} : EXCEPTIONS;
-  const dictionary: Dictionary = options.dictionary ? { ...base, ...options.dictionary } : base;
+  const lookup: Lookup = {
+    exact: options.dictionary ?? {},
+    prefix: options.builtInExceptions === false ? {} : EXCEPTIONS,
+  };
   const segments: Segment[] = [];
 
   // Find all matched *...* pairs. Greedy from left.
@@ -230,7 +250,7 @@ export function transliterateSegments(
     if (star === -1) {
       // No more stars — transliterate the rest.
       const tail = text.slice(i);
-      if (tail) segments.push({ text: transliterateChunk(tail, dictionary), literal: false });
+      if (tail) segments.push({ text: transliterateChunk(tail, lookup), literal: false });
       break;
     }
 
@@ -239,14 +259,14 @@ export function transliterateSegments(
     if (close === -1) {
       // Unmatched opening * — transliterate everything (including the *).
       const tail = text.slice(i);
-      if (tail) segments.push({ text: transliterateChunk(tail, dictionary), literal: false });
+      if (tail) segments.push({ text: transliterateChunk(tail, lookup), literal: false });
       break;
     }
 
     // Convert text before the opening *
     if (star > i) {
       segments.push({
-        text: transliterateChunk(text.slice(i, star), dictionary),
+        text: transliterateChunk(text.slice(i, star), lookup),
         literal: false,
       });
     }

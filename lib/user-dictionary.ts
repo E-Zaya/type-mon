@@ -4,7 +4,9 @@
  * Whenever the input contains a word with `_` between two letters
  * (unt_san), the pair "untsan" → "унтсан" is remembered, so the next time
  * the user types untsan without the underscore it still comes out right.
- * The data never leaves the browser (localStorage).
+ * Learned words match whole words only (untsanaa is not untsan), because
+ * a prefix learned from a typo (s_h → "sh") would otherwise rewrite every
+ * word starting with it. The data never leaves the browser (localStorage).
  *
  * learnFromInput() is pure so it can be tested; the storage helpers wrap it.
  */
@@ -21,6 +23,14 @@ const LETTER = "a-zA-ZöüÖÜ'’‘";
 /** A word that contains at least one `_` between two letters. */
 const TAUGHT_WORD = new RegExp(`[${LETTER}]+(?:_[${LETTER}]+)+`, "g");
 
+/** A storable key: 3–40 lowercase letters/apostrophes. Values: Cyrillic, up to 60 chars. */
+const VALID_KEY = /^[a-zöü'’‘]{3,40}$/;
+const VALID_VALUE = /^[а-яёөү'’‘]{1,60}$/;
+
+export function isValidEntry(key: string, value: string): boolean {
+  return VALID_KEY.test(key) && VALID_VALUE.test(value);
+}
+
 /**
  * Pairs to remember from one input: for every `a_b` word, the key is the
  * lowercase word without underscores and the value is its conversion.
@@ -33,7 +43,7 @@ export function learnFromInput(input: string): Dictionary {
   for (const word of outside.match(TAUGHT_WORD) ?? []) {
     const key = word.replace(/_/g, "").toLowerCase();
     const value = transliterate(word).toLowerCase();
-    if (key.length >= 2 && value && value !== transliterate(key).toLowerCase()) {
+    if (isValidEntry(key, value) && value !== transliterate(key).toLowerCase()) {
       learned[key] = value;
     }
   }
@@ -54,7 +64,7 @@ function parse(raw: string | null): Dictionary {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     const out: Dictionary = {};
     for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof k === "string" && typeof v === "string" && k && v) out[k] = v;
+      if (typeof v === "string" && isValidEntry(k, v)) out[k] = v;
     }
     return out;
   } catch {

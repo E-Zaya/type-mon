@@ -29,6 +29,8 @@ const MNS: Record<string, string> = {
 };
 
 const VOWELS = "аоуүэиөеёюяы";
+/** Vowels the engine has an <vowel>i diphthong rule for (ai oi ui wi ei ii). */
+const DIPHTHONG_BASE = "аоуүэи";
 const CYR_LOWER = /[а-яёөү]/;
 const CYR_UPPER = /[А-ЯЁӨҮ]/;
 const CYR = /[а-яёөүА-ЯЁӨҮ]/;
@@ -38,13 +40,14 @@ function wordPieces(chars: string[], style: LatinStyle): string[] {
   const table = style === "mns" ? MNS : TYPEMON;
   return chars.map((c, i) => {
     if (style === "typemon" && c === "й") {
-      // After a vowel and before a consonant it is the diphthong i (сайхан →
-      // saihan); elsewhere y (йогурт → yogurt).
+      // After а/о/у/ү/э/и and before a consonant it is the diphthong i the
+      // engine knows (сайхан → saihan); elsewhere y (йогурт → yogurt,
+      // музей → muzyey, since "yei" would read back as еи).
       const prev = chars[i - 1];
       const next = chars[i + 1];
-      const afterVowel = prev !== undefined && VOWELS.includes(prev);
+      const afterBase = prev !== undefined && DIPHTHONG_BASE.includes(prev);
       const beforeVowel = next !== undefined && VOWELS.includes(next);
-      return afterVowel && !beforeVowel ? "i" : "y";
+      return afterBase && !beforeVowel ? "i" : "y";
     }
     return table[c] ?? c;
   });

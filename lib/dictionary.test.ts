@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EXCEPTIONS, transliterate } from "./transliterate.ts";
+import { EXCEPTIONS, MULTI_RULES, transliterate } from "./transliterate.ts";
 import { findCollisions, toLatinNaive } from "./collisions.ts";
 import { learnFromInput, mergeDictionary, USER_DICTIONARY_MAX } from "./user-dictionary.ts";
 import { MN_WORDS } from "./wpm-words.ts";
@@ -13,7 +13,19 @@ test("every built-in exception is needed and works", () => {
     assert.notEqual(transliterate(latin, { builtInExceptions: false }), cyr, `${latin}: redundant entry`);
     // And the entry fixes it
     assert.equal(transliterate(latin), cyr, `${latin}: dictionary not applied`);
+    // Prefix keys must end where no multi-letter rule can start, otherwise
+    // the key splits a digraph in longer words (batswwri + in → ии, not ий).
+    const last = latin[latin.length - 1];
+    const starters = new Set(MULTI_RULES.map(([rom]) => rom[0]));
+    assert.ok(!starters.has(last), `${latin}: ends in "${last}", which starts a multi-letter rule`);
   }
+});
+
+test("exception stems keep the suffix intact", () => {
+  assert.equal(transliterate("batswwriin"), "батсүүрийн");
+  assert.equal(transliterate("Batswwr"), "Батсүүр");
+  assert.equal(transliterate("untsanii"), "унтсаний");
+  assert.equal(transliterate("eshwlees"), "эсхүлээс");
 });
 
 test("exceptions win over the digraph rules", () => {
@@ -32,11 +44,27 @@ test("exceptions win over the digraph rules", () => {
   assert.equal(transliterate("*untsan*"), "untsan");
 });
 
-test("a caller dictionary wins over the built-in one", () => {
+test("a caller dictionary wins over the built-in one, whole words only", () => {
   assert.equal(transliterate("untsan", { dictionary: { untsan: "унцан" } }), "унцан");
-  assert.equal(transliterate("tsagaan", { dictionary: { tsagaan: "цагаан" } }), "цагаан");
+  assert.equal(transliterate("Otson", { dictionary: { otson: "отсон" } }), "Отсон");
   // Unrelated words are unaffected
   assert.equal(transliterate("sain", { dictionary: { untsan: "унцан" } }), "сайн");
+  // Not a prefix: the suffix form falls back to the rules (or the built-in prefix)
+  assert.equal(transliterate("otsonoo", { dictionary: { otson: "отсон" } }), "оцоноо");
+  assert.equal(transliterate("untsanaa", { dictionary: { untsan: "унцан" } }), "унтсанаа");
+});
+
+test("a learned digraph can never hijack other words", () => {
+  // What a user could teach by typing s_h, t_s, a_i, i_i as words.
+  const harmful = { sh: "сх", ts: "тс", ai: "аи", ii: "ии", shi: "схи" };
+  const opts = { dictionary: harmful };
+  assert.equal(transliterate("shine", opts), "шинэ");
+  assert.equal(transliterate("tsagaan", opts), "цагаан");
+  assert.equal(transliterate("aimag", opts), "аймаг");
+  assert.equal(transliterate("iim", opts), "ийм");
+  assert.equal(transliterate("Shine Sain", opts), "Шинэ Сайн");
+  // The taught word itself, standing alone, is honored
+  assert.equal(transliterate("sh", opts), "сх");
 });
 
 test("the typing corpus has no collisions once exceptions apply", () => {
@@ -70,6 +98,10 @@ test("learnFromInput remembers a_b words without the underscore", () => {
   assert.deepEqual(learnFromInput("*snake_case*"), {});
   // A word whose _ changes nothing is not stored
   assert.deepEqual(learnFromInput("b_a"), {});
+  // Too short to be a word (and exactly the harmful class): not stored
+  assert.deepEqual(learnFromInput("s_h t_s a_i"), {});
+  // Over-long keys are not stored
+  assert.deepEqual(learnFromInput(`${"a".repeat(45)}_b`), {});
 });
 
 test("toLatinNaive spells й the way a user types it", () => {

@@ -24,6 +24,15 @@ test("looseMatch finds the one list word a loose spelling folds to", () => {
   assert.equal(looseMatch("хахаха", index), null);
 });
 
+test("short words are never replaced, even when a list word folds to them", () => {
+  // уг, эс, хун, бух, зов are real words that are simply not in the list.
+  for (const w of ["уг", "эс", "хун", "бух", "зов"]) {
+    assert.equal(looseMatch(w, index), null, w);
+  }
+  const text = transliterateSegments("ug n' hun buh zov");
+  assert.equal(applyLoose(text, index), text);
+});
+
 test("ambiguous folds are not replaced", () => {
   const small = buildLooseIndex(["хол", "хөл"]);
   assert.equal(looseMatch("хол", small), null); // list word itself
@@ -48,7 +57,7 @@ test("applyLoose rewrites words inside converted segments only", () => {
   // Case follows the typed word
   const caps = applyLoose(transliterateSegments("ONOODOR Ugui"), index);
   assert.deepEqual(caps.map((s) => s.text), ["ӨНӨӨДӨР", " ", "Үгүй"]);
-  // Nothing to change: segments come back as they were
+  // Nothing to change: the very same array comes back
   const same = transliterateSegments("sain baina uu");
-  assert.deepEqual(applyLoose(same, index), same);
+  assert.equal(applyLoose(same, index), same);
 });

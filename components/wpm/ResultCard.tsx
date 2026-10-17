@@ -171,7 +171,8 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
           </ActionButton>
         )}
         <a href={imageUrl} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("image")}>Зураг</a>
-        <a href={storyUrl} download={`typemon-${result.wpm}wpm-story.png`} className={actionClass} onClick={() => share("story")}>
+        {/* download works same-origin (production); elsewhere the image opens in a new tab */}
+        <a href={storyUrl} download={`typemon-${result.wpm}wpm-story.png`} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("story")}>
           Story зураг
         </a>
       </div>

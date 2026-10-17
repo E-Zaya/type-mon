@@ -6,8 +6,13 @@
  * list word matches, uses it instead.
  *
  * It only ever replaces a word with a known word, never invents one, and a
- * word that is already in the list is left alone.
+ * word that is already in the list is left alone. Short words are never
+ * touched: with a small list, уг/эс/хун would be "corrected" to үг/ес/хүн
+ * although they are real words that merely are not in the list.
  */
+
+/** Words shorter than this are left alone. */
+export const LOOSE_MIN_LENGTH = 4;
 
 import type { Segment } from "./transliterate.ts";
 
@@ -48,6 +53,7 @@ export function buildLooseIndex(wordList: Iterable<string>): LooseIndex {
  */
 export function looseMatch(word: string, index: LooseIndex): string | null {
   const lower = word.toLowerCase();
+  if (lower.length < LOOSE_MIN_LENGTH) return null;
   if (index.words.has(lower)) return null;
   const candidates = index.byKey.get(looseKey(lower));
   if (!candidates || candidates.length !== 1) return null;
@@ -73,6 +79,7 @@ function caseLike(lower: string, original: string): string {
  */
 export function applyLoose(segments: Segment[], index: LooseIndex): Segment[] {
   const out: Segment[] = [];
+  let changed = false;
   for (const seg of segments) {
     if (seg.literal) {
       out.push(seg);
@@ -89,11 +96,13 @@ export function applyLoose(segments: Segment[], index: LooseIndex): Segment[] {
       plain = "";
       out.push({ text: caseLike(fixed, word), literal: false, loose: true });
       last = m.index + word.length;
+      changed = true;
     }
     plain += seg.text.slice(last);
     if (plain) out.push({ text: plain, literal: false });
   }
-  return out;
+  // Same array when nothing changed, so memoized consumers see no change.
+  return changed ? out : segments;
 }
 
 /* ---- the on/off setting, stored per browser ---- */
