@@ -31,6 +31,8 @@ import {
   subscribeLoose,
 } from "@/lib/loose";
 import { MN_WORDS } from "@/lib/wpm-words";
+import { applyCandidate, findCandidates } from "@/lib/candidates";
+import { appendTemplate, TEMPLATES } from "@/lib/templates";
 
 /** Word list for loose input (o/ө, u/ү folded). Built once per page. */
 const LOOSE_INDEX = buildLooseIndex(MN_WORDS);
@@ -117,6 +119,8 @@ export default function TypeMonEditor({
   // snapshot keeps SSR markup stable ("Ctrl").
   const mac = useSyncExternalStore(subscribeNever, isMac, () => false);
   const [polish, setPolish] = useState<PolishStatus>({ kind: "idle" });
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [polishApplied, setPolishApplied] = useState(false);
   const [polishShowChanges, setPolishShowChanges] = useState(false);
   const online = useSyncExternalStore(
@@ -159,6 +163,11 @@ export default function TypeMonEditor({
     const strict = transliterateSegments(input, { dictionary: userDictionary });
     return looseEnabled ? applyLoose(strict, LOOSE_INDEX) : strict;
   }, [input, userDictionary, looseEnabled]);
+  // Alternatives (ц/тс, ө/о …) offered as chips under the output.
+  const candidates = useMemo(
+    () => findCandidates(input, LOOSE_INDEX, userDictionary),
+    [input, userDictionary]
+  );
   const cyrillic = useMemo(() => segments.map((s) => s.text).join(""), [segments]);
   // Stable key for the output's AnimatePresence — re-mount only when the
   // textual output changes, otherwise highlights flicker on every keystroke.
@@ -175,9 +184,9 @@ export default function TypeMonEditor({
     return Math.round(wordCount / (elapsedSec / 60));
   }, [startedAt, elapsedSec, wordCount]);
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const next = e.target.value;
+  /** Every way the input changes (typing, chips, templates, paste) goes through here. */
+  const applyInput = useCallback(
+    (next: string) => {
       setInput(next);
       // Any edit invalidates the previous polished result.
       setPolish((p) => (p.kind === "idle" ? p : { kind: "idle" }));
@@ -191,6 +200,45 @@ export default function TypeMonEditor({
       }
     },
     [startedAt]
+  );
+
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => applyInput(e.target.value),
+    [applyInput]
+  );
+
+  /** "Буулгах": read the clipboard (a Latin message from a friend) into the input. */
+  const handlePaste = useCallback(async () => {
+    const note = (message: string) => {
+      setPasteNote(message);
+      window.setTimeout(() => setPasteNote(null), 2500);
+    };
+    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
+      note("Энэ хөтөч дээр буулгах боломжгүй. Ctrl+V ашиглана уу.");
+      return;
+    }
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!text) {
+        note("Самбар хоосон байна.");
+        return;
+      }
+      applyInput(input ? `${input}\n${text}` : text);
+      track("paste", { chars: text.length });
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    } catch {
+      note("Буулгах зөвшөөрөл өгнө үү, эсвэл Ctrl+V ашиглана уу.");
+    }
+  }, [applyInput, input]);
+
+  const handleTemplate = useCallback(
+    (text: string) => {
+      applyInput(appendTemplate(input, text));
+      setTemplatesOpen(false);
+      track("template");
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    },
+    [applyInput, input]
   );
 
   const handleCopy = useCallback(async () => {
@@ -504,6 +552,34 @@ export default function TypeMonEditor({
         </div>
       </div>
 
+      {/* Alternatives: ц/тс, ө/о … one click rewrites the Latin word */}
+      {candidates.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 px-1" aria-label="Өөр хувилбар">
+          <span className="text-[11px] uppercase tracking-widest text-black/50 dark:text-white/50">
+            Өөр хувилбар
+          </span>
+          {candidates.map((c) => (
+            <button
+              key={`${c.start}-${c.candidate}`}
+              type="button"
+              onClick={() => applyInput(applyCandidate(input, c))}
+              title={c.reason === "ts" ? "т+с гэж уншина" : "Үгийн жагсаалтаас"}
+              className="
+                inline-flex items-center gap-1 rounded-md px-2 py-0.5
+                bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10
+                border border-black/10 dark:border-white/10
+                text-xs text-black/80 dark:text-white/80
+                transition-colors duration-150
+              "
+            >
+              <span className="text-black/50 dark:text-white/50">{c.current}</span>
+              <span className="text-black/40 dark:text-white/40">→</span>
+              <span className="text-[#1D9E75]">{c.candidate}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Action row */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Settings (gear) — placed before Clear/Save */}
@@ -564,6 +640,42 @@ export default function TypeMonEditor({
         </button>
         <button
           type="button"
+          onClick={handlePaste}
+          title="Самбараас буулгах"
+          className="
+            bg-black/5 hover:bg-black/10
+            dark:bg-white/5 dark:hover:bg-white/10
+            border border-black/10 dark:border-white/10
+            rounded-lg text-sm px-3 py-1.5
+            text-black/80 hover:text-black
+            dark:text-white/80 dark:hover:text-white
+            transition-all duration-150
+          "
+        >
+          Буулгах
+        </button>
+        <button
+          type="button"
+          onClick={() => setTemplatesOpen((v) => !v)}
+          aria-expanded={templatesOpen}
+          title="Ажлын захидлын загвар"
+          className={`
+            border rounded-lg text-sm px-3 py-1.5
+            transition-all duration-150
+            ${templatesOpen
+              ? "bg-[#1D9E75]/15 border-[#1D9E75]/50 text-[#1D9E75]"
+              : "bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 border-black/10 dark:border-white/10 text-black/80 hover:text-black dark:text-white/80 dark:hover:text-white"}
+          `}
+        >
+          Загвар
+        </button>
+        {pasteNote && (
+          <span className="text-xs text-black/60 dark:text-white/60" role="status">
+            {pasteNote}
+          </span>
+        )}
+        <button
+          type="button"
           onClick={handleCopy}
           disabled={!cyrillic}
           className="
@@ -588,6 +700,30 @@ export default function TypeMonEditor({
           <ShortcutChip keys={[modKey, "Shift", "P"]} desc="Polish" />
         </div>
       </div>
+
+      {/* Work-message templates, inserted as Cyrillic lines */}
+      {templatesOpen && (
+        <div className="flex flex-wrap gap-1.5 px-1" aria-label="Загвар">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.label}
+              type="button"
+              onClick={() => handleTemplate(t.text)}
+              title={t.text}
+              className="
+                inline-flex items-center gap-1.5 rounded-md px-2 py-1
+                bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10
+                border border-black/10 dark:border-white/10
+                text-xs text-black/80 dark:text-white/80
+                transition-colors duration-150
+              "
+            >
+              <span className="text-black/50 dark:text-white/50">{t.label}</span>
+              <span className="font-cyrillic">{t.text}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Mobile-only polish button — full width on its own row so it doesn't
           fight the green Copy button for attention. */}
