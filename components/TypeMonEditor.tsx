@@ -16,6 +16,23 @@ import PolishPanel from "@/components/polish/PolishPanel";
 import SparkleIcon from "@/components/polish/SparkleIcon";
 import { POLISH_MAX_CHARS } from "@/lib/polish-prompt";
 import { POLISH_MESSAGES, requestPolish, type PolishStatus } from "@/lib/polish-client";
+import {
+  getServerUserDictionary,
+  readUserDictionary,
+  subscribeUserDictionary,
+  teachFromInput,
+} from "@/lib/user-dictionary";
+import {
+  applyLoose,
+  buildLooseIndex,
+  getServerLooseEnabled,
+  readLooseEnabled,
+  subscribeLoose,
+} from "@/lib/loose";
+import { MN_WORDS } from "@/lib/wpm-words";
+
+/** Word list for loose input (o/ө, u/ү folded). Built once per page. */
+const LOOSE_INDEX = buildLooseIndex(MN_WORDS);
 
 const HISTORY_KEY = "typemon-history";
 const HISTORY_MAX = 5;
@@ -126,7 +143,21 @@ export default function TypeMonEditor({
     return () => window.clearInterval(id);
   }, [startedAt]);
 
-  const segments = useMemo(() => transliterateSegments(input), [input]);
+  // Words the user taught with `_` (see lib/user-dictionary.ts).
+  const userDictionary = useSyncExternalStore(
+    subscribeUserDictionary,
+    readUserDictionary,
+    getServerUserDictionary
+  );
+  const looseEnabled = useSyncExternalStore(
+    subscribeLoose,
+    readLooseEnabled,
+    getServerLooseEnabled
+  );
+  const segments = useMemo(() => {
+    const strict = transliterateSegments(input, { dictionary: userDictionary });
+    return looseEnabled ? applyLoose(strict, LOOSE_INDEX) : strict;
+  }, [input, userDictionary, looseEnabled]);
   const cyrillic = useMemo(() => segments.map((s) => s.text).join(""), [segments]);
   // Stable key for the output's AnimatePresence — re-mount only when the
   // textual output changes, otherwise highlights flicker on every keystroke.
@@ -163,6 +194,8 @@ export default function TypeMonEditor({
 
   const handleCopy = useCallback(async () => {
     if (!cyrillic) return;
+    // Copying means the text is final: remember any a_b words it contains.
+    teachFromInput(input);
     try {
       await navigator.clipboard.writeText(cyrillic);
       setCopied(true);
@@ -171,7 +204,7 @@ export default function TypeMonEditor({
     } catch {
       /* swallow */
     }
-  }, [cyrillic]);
+  }, [cyrillic, input]);
 
   const handleClear = useCallback(() => {
     setInput("");
@@ -214,6 +247,7 @@ export default function TypeMonEditor({
     const roman = input.trim();
     const polished = polish.polished.trim();
     if (!roman || !polished) return;
+    teachFromInput(roman);
     const items = readHistory();
     const item: HistoryItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -242,6 +276,7 @@ export default function TypeMonEditor({
     const roman = input.trim();
     const cyr = cyrillic.trim();
     if (!roman || !cyr) return;
+    teachFromInput(roman);
     const items = readHistory();
     const item: HistoryItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -402,6 +437,14 @@ export default function TypeMonEditor({
                   segments.map((s, idx) =>
                     s.literal ? (
                       <span key={idx} className="text-[#1D9E75]">
+                        {s.text}
+                      </span>
+                    ) : s.loose ? (
+                      <span
+                        key={idx}
+                        title="Ойролцоо үгээр сольсон"
+                        className="underline decoration-dotted decoration-[#1D9E75]/70 underline-offset-4"
+                      >
                         {s.text}
                       </span>
                     ) : (
