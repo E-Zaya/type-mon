@@ -46,6 +46,50 @@ Web 版の改善一覧は 2026-10-17 のアイデア一覧（Zaya 作成）を�
 - 逆変換で й を `i` にできるのは а/о/у/ү/э/и の後だけ（エンジンに ai/oi/ui/wi/ei/ii しかない）。музей は `muzyey`。アプリの共有シートで逆変換を出すときも同じ表を使う
 - 共有カードは Web に 1200×630（OG）と 1080×1920（ストーリー用）がある。アプリの結果画面からも同じ URL を叩けば画像が作れる（`/og/wpm?…`、`/og/wpm/story?…`）
 
+## 5. 競合と参考（2026-10-17 調査）
+
+### Simeji が広まった理由（日本）
+- きせかえ（写真背景、キャラクター・アーティストとのコラボテーマ）、顔文字・絵文字の量とランキング、クラウド超変換（固有名詞・流行語を 200 万語のクラウド辞書で変換）の 3 つ。累計 7,000 万 DL（2025-04 時点、Baidu 発表）。Z 世代向けに「連発コメント」などの遊び機能
+- 2023 年に ChatGPT ベースの「AI に質問・テキスト生成・AI 返信」をキーボード上に追加。2025-12 に AI プロンプトの「AI ライブラリ」
+- 出典: [App Store](https://apps.apple.com/jp/app/id899997582)、[AppBank 2020](https://www.appbank.net/2020/07/07/iphone-application/229107.php)、[AIsmiley](https://aismiley.co.jp/ai_news/simeji-chatgpt-simejiai/)、[AppBank 2026-01](https://www.appbank.net/2026/01/03/iphone-news/2898703.php)
+
+### モンゴルの既存キーボード
+- **Gboard**: モンゴル語の音声入力あり（[Montsame](https://montsame.mn/en/read/220059)、[Eguur](https://eguur.mn/82357/)）。さらに [8.7 系のリリースノート](https://www.apkmirror.com/?p=812887)（APKMirror 転載）に「Transliteration for 50+ more language varieties, including Mongolian」とある。**Android の Gboard にラテン→キリルの変換モードが既にある可能性が高い**。実機で確認すること（ө/ү の精度、学習、オフライン可否）。「打ちながら変換するものは無い」という前提は Android では崩れる
+- Gboard の変換は統計モデル（[WFST 論文 2017](https://aclanthology.org/W17-4002.pdf)、22 言語で開始）。TypeMon の差別化は「規則が明示で結果が毎回同じ」「ユーザー辞書で学習」「完全オフライン」「ゲームと添削」
+- **Chimege Keyboard**（Bolorsoft、iOS）: モンゴル語音声入力（97% 精度を主張）＋スペルチェッカー。無料。ブリヤート・カルムイク対応。[App Store](https://apps.apple.com/vc/app/chimege-keyboard/id1521445021)。音声は Chimege の領域。TypeMon は「打つ」側に集中する
+- **BolorDuran**（Bolorsoft）: Word 用のスペルチェッカー、有料ライセンス。[Microsoft Marketplace](https://appsource.microsoft.com/en-us/product/office/WA200009285)。Apple 製品にはモンゴル語キリルのネイティブ綴り検査が無い（[Apple Developer Forums](https://developer.apple.com/forums/thread/769756)）→ iOS で「正しく書ける」は空白地帯
+- Play Store のその他（Mongolian Keyboard、Монгол гар 系）: キリル配列を出すだけのテンプレートアプリ。[Google Input Tools](https://www.google.com/inputtools/help/languages.html) もモンゴル語はキリル配列のみで transliteration なし
+
+### 利用者側のデータ
+- 16〜30 歳のキリル文字リテラシーは 47.5%（31〜40 歳 78.4%）。若年層ではラテン文字の習慣が影響していると指摘（[2020 年の社会言語学調査](https://cyberleninka.ru/article/n/sociolinguistic-research-of-national-mongolian-acript-skills)）→「正しく書きたい」需要の裏付け
+- SNS のラテン表記には決まった規則が無く、同じ語が複数の綴りで現れる（[研究](https://mongoloved.kigiran.com/jour/article/download/551/433)）→ 「ゆるい入力」と候補バーが必要な理由
+- 2025-01 から公文書でキリルと伝統モンゴル文字を併用（[Eurasian Research](https://www.eurasian-research.org/?p=43663)）→ 公的文書を書く層には「モンゴル文字への変換」が将来の差別化になり得る（難度高）
+
+### 頻度付き語彙の候補（ゆるい入力・候補バー用）
+- Krylov 2018「現代モンゴル語の頻度辞書」（[Монголоведение](https://doaj.org/article/3fd4888fba8349479463eb41a4e16a44)、PDF、ライセンス未確認）
+- 現代モンゴル語一般コーパス GKMYa（[Ruslang](https://vja.ruslang.ru/en/node/362)、116 万語、配布形態未確認）
+- Sketch Engine の mnWaC（[6M 語](https://www.sketchengine.eu/mongolian-wac-corpus/)、有料ツール内）
+- 未確認: Leipzig Corpora Collection にモンゴル語（mon）があれば CC BY で単語頻度が取れる。先にここを確認する
+
+## 6. 追加アイデア（Simeji をモンゴルに置き換えると）
+
+Web 版で今すぐできるもの:
+- **共有ターゲット**: PWA の `manifest` に `share_target` を足し、他アプリから「共有」で受け取ったラテン文を変換して返す。Android ではこれだけで「キーボード無しの TypeMon」になる
+- **貼り付けて変換**: 友達から来たラテン文を貼ると全文キリルにするボタン（受信側の需要）
+- **候補チップ**: 出力側で е/э、ц/тс、ө/о を含む語の下に代替候補を出す。アプリの候補バーの試作になる
+- **定型文**: 仕事の連絡向けの挨拶・依頼・締めの定型（「Сайн байна уу」「Хүлээн авна уу」「Хүндэтгэсэн」）。狙いが「公式な文章」なので、変換より先に使われる可能性がある
+- **ゲームの対抗戦**: 学校・クラス単位のコード付きランキング（アカウント不要、コードで集計）
+
+Android の最初の一歩（IME より前）:
+- **ACTION_PROCESS_TEXT**: どのアプリでも選択したラテン文字を「Кирилл болгох」で変換するコンテキストメニュー。IME を作らずに出せて、Gboard と競合しない
+
+キーボード本体（Simeji の 3 本柱の置き換え）:
+- **きせかえ** → モンゴル文字モチーフ、地元アーティストのテーマ、ナーダム・ツァガーンサル限定テーマ
+- **顔文字・スタンプ** → モンゴル固有の絵文字候補（морь → 🐎、наадам → 🏇、цагаан сар → 🥟）と、モンゴル語の若者言葉スタンプ
+- **クラウド超変換** → 人名・地名・ブランド名の辞書パック（Баянзүрх、Сонгинохайрхан など）。キーボードはオフラインのまま、本体アプリでパックを更新する
+- **AI 返信** → 既存の polish を「ярианы хэлбэр → албан хэлбэр」（カジュアル→公式）に特化。これが一番モンゴル向け
+- **伝統モンゴル文字への変換**（将来）: 2025 年からの公文書併用に乗る。辞書ベースの変換が要るので別計画
+
 ## 4. アイデア（思いついた順）
 
 - 2026-10-17: タイピングゲームの「cy」モードの開始前ヒント（q=ө など）をアプリのチュートリアルに流用する
