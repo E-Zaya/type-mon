@@ -63,7 +63,8 @@ export function looseMatch(word: string, index: LooseIndex): string | null {
 const CYR_WORD = /[а-яёөү]+/giu;
 const CYR_UPPER = /[А-ЯЁӨҮ]/;
 
-function caseLike(lower: string, original: string): string {
+/** Case `lower` (Cyrillic) like `original`: ALL CAPS, Title, or as is. */
+export function caseLike(lower: string, original: string): string {
   const letters = [...original];
   const upper = letters.filter((c) => CYR_UPPER.test(c)).length;
   if (upper === 0) return lower;
