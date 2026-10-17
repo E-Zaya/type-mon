@@ -19,6 +19,18 @@ type Phase = "idle" | "running";
 const LINE_HEIGHT = 44;
 const VISIBLE_LINES = 3;
 
+/* The handful of keys that are not obvious. The full table is in settings. */
+const KEY_HINTS: [string, string][] = [
+  ["q", "ө"],
+  ["w", "ү"],
+  ["'", "ь"],
+  ["yi", "ы"],
+  ["ai", "ай"],
+  ["ts", "ц"],
+  ["sh", "ш"],
+  ["ch", "ч"],
+];
+
 export default function TypingTest({ mode, target, onFinish }: Props) {
   const seed = useMemo(() => daySeed(), []);
   const words = useMemo(() => sessionWords(mode, seed), [mode, seed]);
@@ -155,6 +167,27 @@ export default function TypingTest({ mode, target, onFinish }: Props) {
         </div>
         <span className="hidden sm:inline">{phase === "idle" ? "Бичиж эхлэхэд цаг явна" : "Зай дарж дараагийн үг рүү"}</span>
       </div>
+
+      {/* The rules a newcomer needs, shown until the first key in TypeMon mode */}
+      {mode === "cy" && phase === "idle" && (
+        <div className="flex flex-wrap gap-1.5 px-1" aria-label="Үсгийн харгалзаа">
+          {KEY_HINTS.map(([latin, cyr]) => (
+            <span
+              key={latin}
+              className="
+                inline-flex items-center gap-1 rounded-md px-1.5 py-0.5
+                bg-black/5 dark:bg-white/5
+                border border-black/10 dark:border-white/10
+                text-[11px] text-black/70 dark:text-white/70
+              "
+            >
+              <kbd className="font-mono">{latin}</kbd>
+              <span className="text-black/40 dark:text-white/40">→</span>
+              <span className="font-cyrillic">{cyr}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Challenge target */}
       {target ? (
