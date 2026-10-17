@@ -3,6 +3,7 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { track } from "@vercel/analytics";
 import { encodeResult, modeLabel, nextTier, percentile, quip, style, tierFor, type WpmResult } from "@/lib/wpm-rank";
 
 type Props = {
@@ -37,7 +38,13 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
     () => false
   );
 
+  const share = useCallback(
+    (via: string) => track("share", { via, mode: result.mode, wpm: result.wpm }),
+    [result.mode, result.wpm]
+  );
+
   const copy = useCallback(async (value: string, kind: "link" | "challenge") => {
+    share(kind);
     try {
       await navigator.clipboard.writeText(value);
       setCopied(kind);
@@ -45,15 +52,16 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
     } catch {
       /* clipboard blocked — the URL is still visible in the address bar */
     }
-  }, []);
+  }, [share]);
 
   const nativeShare = useCallback(async () => {
+    share("native");
     try {
       await navigator.share({ title: "TypeMon Хурд", text, url: shareUrl });
     } catch {
       /* dismissed */
     }
-  }, [text, shareUrl]);
+  }, [share, text, shareUrl]);
 
   const facebook = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
   const twitter = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
@@ -154,16 +162,16 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
         {canShare && (
           <ActionButton onClick={nativeShare}>Хуваалцах</ActionButton>
         )}
-        <a href={facebook} target="_blank" rel="noopener noreferrer" className={actionClass}>Facebook</a>
-        <a href={twitter} target="_blank" rel="noopener noreferrer" className={actionClass}>X</a>
+        <a href={facebook} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("facebook")}>Facebook</a>
+        <a href={twitter} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("x")}>X</a>
         <ActionButton onClick={() => copy(shareUrl, "link")}>{copied === "link" ? "Хууллаа ✓" : "Холбоос"}</ActionButton>
         {!visitor && (
           <ActionButton onClick={() => copy(challengeUrl, "challenge")}>
             {copied === "challenge" ? "Хууллаа ✓" : "Найзаа сорих"}
           </ActionButton>
         )}
-        <a href={imageUrl} target="_blank" rel="noopener noreferrer" className={actionClass}>Зураг</a>
-        <a href={storyUrl} download={`typemon-${result.wpm}wpm-story.png`} className={actionClass}>
+        <a href={imageUrl} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("image")}>Зураг</a>
+        <a href={storyUrl} download={`typemon-${result.wpm}wpm-story.png`} className={actionClass} onClick={() => share("story")}>
           Story зураг
         </a>
       </div>

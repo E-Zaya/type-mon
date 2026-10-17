@@ -9,6 +9,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { track } from "@vercel/analytics";
 import { transliterateSegments } from "@/lib/transliterate";
 import type { HistoryItem } from "@/components/HistoryPanel";
 import SettingsModal from "@/components/SettingsModal";
@@ -196,6 +197,7 @@ export default function TypeMonEditor({
     if (!cyrillic) return;
     // Copying means the text is final: remember any a_b words it contains.
     teachFromInput(input);
+    track("copy", { chars: cyrillic.length });
     try {
       await navigator.clipboard.writeText(cyrillic);
       setCopied(true);
@@ -238,7 +240,12 @@ export default function TypeMonEditor({
     setPolishApplied(false);
     setPolishShowChanges(false);
 
-    setPolish(await requestPolish(source));
+    const status = await requestPolish(source);
+    setPolish(status);
+    track("polish", {
+      outcome: status.kind === "done" ? "ok" : "error",
+      changes: status.kind === "done" ? status.changes.length : -1,
+    });
   }, [cyrillic, online, polish]);
 
   /** "Хэрэглэх" — save the polished result to history. */
@@ -277,6 +284,7 @@ export default function TypeMonEditor({
     const cyr = cyrillic.trim();
     if (!roman || !cyr) return;
     teachFromInput(roman);
+    track("save", { chars: cyr.length });
     const items = readHistory();
     const item: HistoryItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
