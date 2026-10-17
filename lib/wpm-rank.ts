@@ -22,7 +22,21 @@ export type WpmResult = {
   mistakes: number;
   /** YYYYMMDD of the session. */
   day: number;
+  /** Optional display name for class boards; letters, digits, spaces, up to NAME_MAX. */
+  name?: string;
 };
+
+export const NAME_MAX = 24;
+
+/** Trim a user-typed name to what a share link may carry; "" when nothing is left. */
+export function cleanName(raw: string | undefined): string {
+  if (!raw) return "";
+  return raw
+    .replace(/[^\p{L}\p{N} .'’-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, NAME_MAX);
+}
 
 export type Tier = {
   id: string;
@@ -123,6 +137,8 @@ export function encodeResult(r: WpmResult): string {
     x: String(r.mistakes),
     d: String(r.day),
   });
+  const name = cleanName(r.name);
+  if (name) p.set("n", name);
   return p.toString();
 }
 
@@ -146,7 +162,46 @@ export function decodeResult(params: Params): WpmResult | null {
   const mistakes = int(params.x, 600);
   const day = int(params.d, 99991231);
   if (wpm === null || accuracy === null || chars === null || words === null || mistakes === null || day === null) return null;
-  return { mode: modeRaw, wpm, accuracy, chars, words, mistakes, day };
+  const result: WpmResult = { mode: modeRaw, wpm, accuracy, chars, words, mistakes, day };
+  const name = cleanName(Array.isArray(params.n) ? params.n[0] : params.n);
+  if (name) result.name = name;
+  return result;
+}
+
+/**
+ * Results found in free text: share links (/wpm/r?…), board links
+ * (/wpm/board?r=…&r=…) or bare query strings, one per line or mixed.
+ * Duplicates (same query) are dropped; order is kept.
+ */
+export function parseResults(text: string): WpmResult[] {
+  const out: WpmResult[] = [];
+  const seen = new Set<string>();
+  const add = (query: string) => {
+    const params = Object.fromEntries(new URLSearchParams(query).entries());
+    const r = decodeResult(params);
+    if (!r) return;
+    const key = encodeResult(r);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(r);
+  };
+  for (const piece of text.split(/\s+/)) {
+    if (!piece) continue;
+    const q = piece.indexOf("?");
+    const query = q === -1 ? piece : piece.slice(q + 1);
+    const params = new URLSearchParams(query);
+    const boards = params.getAll("r");
+    if (boards.length) boards.forEach((b) => add(b));
+    else add(query);
+  }
+  return out;
+}
+
+/** Query string for a board link carrying every result. */
+export function encodeBoard(results: WpmResult[]): string {
+  const p = new URLSearchParams();
+  for (const r of results) p.append("r", encodeResult(r));
+  return p.toString();
 }
 
 export function modeLabel(mode: WpmMode): string {

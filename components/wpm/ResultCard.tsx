@@ -4,7 +4,7 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { track } from "@vercel/analytics";
-import { encodeResult, modeLabel, nextTier, percentile, quip, style, tierFor, type WpmResult } from "@/lib/wpm-rank";
+import { cleanName, encodeResult, modeLabel, NAME_MAX, nextTier, percentile, quip, style, tierFor, type WpmResult } from "@/lib/wpm-rank";
 
 type Props = {
   result: WpmResult;
@@ -22,8 +22,11 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
   const next = nextTier(result.wpm);
   const pct = percentile(result.wpm, result.mode);
   const base = origin ?? SITE;
-  const query = encodeResult(result);
+  // A name makes the result usable on a class board; it travels in the link.
+  const [name, setName] = useState(result.name ?? "");
+  const query = encodeResult({ ...result, name: cleanName(name) });
   const shareUrl = `${base}/wpm/r?${query}`;
+  const boardUrl = `${base}/wpm/board?r=${encodeURIComponent(query)}`;
   const challengeUrl = `${base}/wpm?mode=${result.mode}&target=${result.wpm}`;
   const imageUrl = `${base}/og/wpm?${query}`;
   // 1080×1920 for Instagram / Facebook stories; same query as the OG card.
@@ -132,6 +135,28 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
         )}
       </div>
 
+      {/* Name for the class board (optional) */}
+      {!visitor && (
+        <label className="mt-5 flex items-center gap-2 text-sm">
+          <span className="text-black/60 dark:text-white/60">Нэр</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={NAME_MAX}
+            placeholder="Самбар дээр харагдана"
+            className="
+              flex-1 min-w-0 max-w-xs h-9 px-3 rounded-lg
+              bg-black/5 dark:bg-white/5
+              border border-black/10 dark:border-white/10
+              text-black/90 dark:text-white/90
+              placeholder-black/30 dark:placeholder-white/25
+              outline-none focus:border-[#1D9E75]/60
+            "
+          />
+        </label>
+      )}
+
       {/* Actions */}
       <div className="mt-6 flex flex-wrap gap-2">
         {visitor ? (
@@ -170,6 +195,7 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
             {copied === "challenge" ? "Хууллаа ✓" : "Найзаа сорих"}
           </ActionButton>
         )}
+        <Link href={boardUrl.replace(base, "")} className={actionClass} onClick={() => share("board")}>Самбар</Link>
         <a href={imageUrl} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("image")}>Зураг</a>
         {/* download works same-origin (production); elsewhere the image opens in a new tab */}
         <a href={storyUrl} download={`typemon-${result.wpm}wpm-story.png`} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("story")}>
