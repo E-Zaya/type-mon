@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import {
+  clearUserDictionary,
+  getServerUserDictionary,
+  readUserDictionary,
+  subscribeUserDictionary,
+} from "@/lib/user-dictionary";
+import {
+  getServerLooseEnabled,
+  readLooseEnabled,
+  setLooseEnabled,
+  subscribeLoose,
+} from "@/lib/loose";
 
 type Props = {
   open: boolean;
@@ -70,7 +82,19 @@ const SPECIAL: Array<[string, string]> = [
 
 export default function SettingsModal({ open, onClose }: Props) {
   const mounted = useClientMounted();
+  const userDictionary = useSyncExternalStore(
+    subscribeUserDictionary,
+    readUserDictionary,
+    getServerUserDictionary
+  );
+  const learned = Object.entries(userDictionary);
+  const looseEnabled = useSyncExternalStore(
+    subscribeLoose,
+    readLooseEnabled,
+    getServerLooseEnabled
+  );
   const titleId = useId();
+  const looseId = useId();
   const sheetRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -282,6 +306,74 @@ export default function SettingsModal({ open, onClose }: Props) {
                   <span className="font-mono">unt_san</span> → унтсан,{" "}
                   <span className="font-mono">mart_san</span> → мартсан.
                 </p>
+              </section>
+
+              {/* Loose input */}
+              <section
+                className="
+                  border-t border-black/10 dark:border-white/10 pt-5
+                "
+              >
+                <h3 className="text-[11px] text-black/60 dark:text-white/60 uppercase tracking-widest mb-3">
+                  Ойролцоо бичилт (туршилт)
+                </h3>
+                <label htmlFor={looseId} className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    id={looseId}
+                    type="checkbox"
+                    checked={looseEnabled}
+                    onChange={(e) => setLooseEnabled(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[#1D9E75]"
+                  />
+                  <span className="text-sm text-black/80 dark:text-white/80 leading-relaxed">
+                    <span className="font-mono">onoodor</span> → өнөөдөр,{" "}
+                    <span className="font-mono">ugui</span> → үгүй.
+                    <span className="block text-xs text-black/60 dark:text-white/60 mt-1">
+                      ө/о, ү/у-г ялгалгүй бичсэн үгийг мэддэг үгтэй тааруулж солино. Сольсон үг доогуураа цэгтэй зураастай харагдана.
+                    </span>
+                  </span>
+                </label>
+              </section>
+
+              {/* Words learned from a_b input */}
+              <section
+                className="
+                  border-t border-black/10 dark:border-white/10 pt-5
+                "
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[11px] text-black/60 dark:text-white/60 uppercase tracking-widest">
+                    Сурсан үгс ({learned.length})
+                  </h3>
+                  {learned.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearUserDictionary}
+                      className="
+                        text-[11px] px-2 py-1 rounded-md
+                        bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10
+                        border border-black/10 dark:border-white/10
+                        text-black/70 hover:text-black dark:text-white/70 dark:hover:text-white
+                        transition-colors duration-150
+                      "
+                    >
+                      Цэвэрлэх
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-black/60 dark:text-white/60 leading-relaxed">
+                  <code className="font-mono text-[#1D9E75]">_</code>-ээр салгаж бичээд хадгалсан эсвэл хуулсан үгийг санаж, дараагийн удаа{" "}
+                  <code className="font-mono text-[#1D9E75]">_</code>-гүй бичсэн ч зөв хөрвүүлнэ. Зөвхөн энэ төхөөрөмж дээр хадгална.
+                </p>
+                {learned.length > 0 && (
+                  <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {learned.map(([latin, cyr]) => (
+                      <li key={latin}>
+                        <MappingCell latin={latin} cyrillic={cyr} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
 
               {/* Latin escape syntax */}

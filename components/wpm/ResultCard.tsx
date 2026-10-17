@@ -3,7 +3,8 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { encodeResult, modeLabel, nextTier, percentile, quip, style, tierFor, type WpmResult } from "@/lib/wpm-rank";
+import { track } from "@vercel/analytics";
+import { cleanName, encodeResult, modeLabel, NAME_MAX, nextTier, percentile, quip, style, tierFor, type WpmResult } from "@/lib/wpm-rank";
 
 type Props = {
   result: WpmResult;
@@ -21,10 +22,15 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
   const next = nextTier(result.wpm);
   const pct = percentile(result.wpm, result.mode);
   const base = origin ?? SITE;
-  const query = encodeResult(result);
+  // A name makes the result usable on a class board; it travels in the link.
+  const [name, setName] = useState(result.name ?? "");
+  const query = encodeResult({ ...result, name: cleanName(name) });
   const shareUrl = `${base}/wpm/r?${query}`;
+  const boardUrl = `${base}/wpm/board?r=${encodeURIComponent(query)}`;
   const challengeUrl = `${base}/wpm?mode=${result.mode}&target=${result.wpm}`;
   const imageUrl = `${base}/og/wpm?${query}`;
+  // 1080×1920 for Instagram / Facebook stories; same query as the OG card.
+  const storyUrl = `${base}/og/wpm/story?${query}`;
   const text = `${tier.emoji} ${result.wpm} WPM — ${tier.name}. Монголчуудын ${pct}%-иас хурдан. Чи давж чадах уу?`;
 
   const [copied, setCopied] = useState<"link" | "challenge" | null>(null);
@@ -35,7 +41,13 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
     () => false
   );
 
+  const share = useCallback(
+    (via: string) => track("share", { via, mode: result.mode, wpm: result.wpm }),
+    [result.mode, result.wpm]
+  );
+
   const copy = useCallback(async (value: string, kind: "link" | "challenge") => {
+    share(kind);
     try {
       await navigator.clipboard.writeText(value);
       setCopied(kind);
@@ -43,15 +55,16 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
     } catch {
       /* clipboard blocked — the URL is still visible in the address bar */
     }
-  }, []);
+  }, [share]);
 
   const nativeShare = useCallback(async () => {
+    share("native");
     try {
       await navigator.share({ title: "TypeMon Хурд", text, url: shareUrl });
     } catch {
       /* dismissed */
     }
-  }, [text, shareUrl]);
+  }, [share, text, shareUrl]);
 
   const facebook = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
   const twitter = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
@@ -122,6 +135,28 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
         )}
       </div>
 
+      {/* Name for the class board (optional) */}
+      {!visitor && (
+        <label className="mt-5 flex items-center gap-2 text-sm">
+          <span className="text-black/60 dark:text-white/60">Нэр</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={NAME_MAX}
+            placeholder="Самбар дээр харагдана"
+            className="
+              flex-1 min-w-0 max-w-xs h-9 px-3 rounded-lg
+              bg-black/5 dark:bg-white/5
+              border border-black/10 dark:border-white/10
+              text-black/90 dark:text-white/90
+              placeholder-black/30 dark:placeholder-white/25
+              outline-none focus:border-[#1D9E75]/60
+            "
+          />
+        </label>
+      )}
+
       {/* Actions */}
       <div className="mt-6 flex flex-wrap gap-2">
         {visitor ? (
@@ -152,15 +187,20 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
         {canShare && (
           <ActionButton onClick={nativeShare}>Хуваалцах</ActionButton>
         )}
-        <a href={facebook} target="_blank" rel="noopener noreferrer" className={actionClass}>Facebook</a>
-        <a href={twitter} target="_blank" rel="noopener noreferrer" className={actionClass}>X</a>
+        <a href={facebook} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("facebook")}>Facebook</a>
+        <a href={twitter} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("x")}>X</a>
         <ActionButton onClick={() => copy(shareUrl, "link")}>{copied === "link" ? "Хууллаа ✓" : "Холбоос"}</ActionButton>
         {!visitor && (
           <ActionButton onClick={() => copy(challengeUrl, "challenge")}>
             {copied === "challenge" ? "Хууллаа ✓" : "Найзаа сорих"}
           </ActionButton>
         )}
-        <a href={imageUrl} target="_blank" rel="noopener noreferrer" className={actionClass}>Зураг</a>
+        <Link href={boardUrl.replace(base, "")} className={actionClass} onClick={() => share("board")}>Самбар</Link>
+        <a href={imageUrl} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("image")}>Зураг</a>
+        {/* download works same-origin (production); elsewhere the image opens in a new tab */}
+        <a href={storyUrl} download={`typemon-${result.wpm}wpm-story.png`} target="_blank" rel="noopener noreferrer" className={actionClass} onClick={() => share("story")}>
+          Story зураг
+        </a>
       </div>
     </motion.section>
   );

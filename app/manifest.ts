@@ -9,6 +9,13 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     scope: '/',
     display: 'standalone',
+    // Installed on Android, TypeMon appears in the share sheet of every app:
+    // shared Latin text lands in ?text= and is converted at once.
+    share_target: {
+      action: '/',
+      method: 'GET',
+      params: { text: 'text', title: 'title', url: 'url' },
+    },
     background_color: '#f5f4ef',
     theme_color: '#1a1a1a',
     icons: [
