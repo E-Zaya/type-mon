@@ -25,6 +25,8 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
   const shareUrl = `${base}/wpm/r?${query}`;
   const challengeUrl = `${base}/wpm?mode=${result.mode}&target=${result.wpm}`;
   const imageUrl = `${base}/og/wpm?${query}`;
+  // 1080×1920 for Instagram / Facebook stories; same query as the OG card.
+  const storyUrl = `${base}/og/wpm/story?${query}`;
   const text = `${tier.emoji} ${result.wpm} WPM — ${tier.name}. Монголчуудын ${pct}%-иас хурдан. Чи давж чадах уу?`;
 
   const [copied, setCopied] = useState<"link" | "challenge" | null>(null);
@@ -161,6 +163,9 @@ export default function ResultCard({ result, origin, visitor = false, onRetry }:
           </ActionButton>
         )}
         <a href={imageUrl} target="_blank" rel="noopener noreferrer" className={actionClass}>Зураг</a>
+        <a href={storyUrl} download={`typemon-${result.wpm}wpm-story.png`} className={actionClass}>
+          Story зураг
+        </a>
       </div>
     </motion.section>
   );
