@@ -16,8 +16,27 @@
  */
 
 import rules from './transliterate-rules.json' with { type: 'json' };
+import exceptions from './transliterate-exceptions.json' with { type: 'json' };
 
 type Mapping = [string, string];
+
+/**
+ * A dictionary maps a lowercase Latin word (without `_`) to its lowercase
+ * Cyrillic spelling. Entries win over the digraph rules and also match as
+ * a prefix, so suffixes still convert normally (batswh → батсүх,
+ * batswhiin → батсүхийн).
+ */
+export type Dictionary = Record<string, string>;
+
+/** Built-in exceptions: words the digraph rules get wrong (унтсан, Батсүх). */
+export const EXCEPTIONS: Dictionary = exceptions.words;
+
+export type TransliterateOptions = {
+  /** Extra words, e.g. what the user taught the app. Win over EXCEPTIONS. */
+  dictionary?: Dictionary;
+  /** false = rules only, no built-in exceptions. For tests and tooling. */
+  builtInExceptions?: boolean;
+};
 
 /** Multi-character mappings — ordered, first match wins. Lowercase values. */
 const MULTI_CHAR_MAP: Mapping[] = rules.multi as Mapping[];
@@ -79,11 +98,38 @@ function isAllCapsWord(text: string, start: number): boolean {
   return letters >= 2;
 }
 
+/** Case the dictionary's lowercase value like the typed word. */
+function caseLikeWord(cyrLower: string, wordSlice: string, wordUpper: boolean): string {
+  if (wordUpper) return cyrLower.toUpperCase();
+  return applyCase(cyrLower, wordSlice);
+}
+
+/**
+ * Longest dictionary key that is a prefix of the word starting at `start`.
+ * Only whole letters count: the word must not contain `_` (the user was
+ * explicit) and the key must be at least two letters.
+ */
+function dictionaryMatch(
+  lower: string,
+  start: number,
+  dictionary: Dictionary
+): { len: number; cyr: string } | null {
+  let end = start;
+  while (end < lower.length && isWordChar(lower[end])) end++;
+  const word = lower.slice(start, end);
+  if (word.includes(SEPARATOR)) return null;
+  for (let len = word.length; len >= 2; len--) {
+    const cyr = dictionary[word.slice(0, len)];
+    if (cyr !== undefined) return { len, cyr };
+  }
+  return null;
+}
+
 /**
  * Convert a chunk of latin text into cyrillic.
  * Internal helper — does NOT understand the *...* escape syntax.
  */
-function transliterateChunk(input: string): string {
+function transliterateChunk(input: string, dictionary: Dictionary): string {
   // Some keyboards produce ö as "o" + combining diaeresis; compose first so
   // the tables see one character. Only here, so *...* stays verbatim.
   const text = input.normalize('NFC');
@@ -97,9 +143,16 @@ function transliterateChunk(input: string): string {
   while (i < text.length) {
     const ch = text[i];
 
-    // Word boundary: decide once per word whether it is ALL CAPS.
+    // Word boundary: decide once per word whether it is ALL CAPS, and
+    // whether the dictionary knows (the start of) this word.
     if (isWordChar(ch) && !isWordChar(text[i - 1])) {
       wordUpper = isAllCapsWord(text, i);
+      const hit = dictionaryMatch(lower, i, dictionary);
+      if (hit) {
+        result += caseLikeWord(hit.cyr, text.slice(i, i + hit.len), wordUpper);
+        i += hit.len;
+        continue;
+      }
     }
 
     // Separator between two letters: drop it, nothing else.
@@ -149,6 +202,8 @@ export type Segment = {
   text: string;
   /** Whether this segment was inside *...* and kept as-is (latin). */
   literal: boolean;
+  /** Set by the loose-input layer (lib/loose.ts) when it replaced this word. */
+  loose?: boolean;
 };
 
 /**
@@ -159,7 +214,12 @@ export type Segment = {
  *
  * Returns an array of segments so the UI can highlight literal sections.
  */
-export function transliterateSegments(text: string): Segment[] {
+export function transliterateSegments(
+  text: string,
+  options: TransliterateOptions = {}
+): Segment[] {
+  const base = options.builtInExceptions === false ? {} : EXCEPTIONS;
+  const dictionary: Dictionary = options.dictionary ? { ...base, ...options.dictionary } : base;
   const segments: Segment[] = [];
 
   // Find all matched *...* pairs. Greedy from left.
@@ -170,7 +230,7 @@ export function transliterateSegments(text: string): Segment[] {
     if (star === -1) {
       // No more stars — transliterate the rest.
       const tail = text.slice(i);
-      if (tail) segments.push({ text: transliterateChunk(tail), literal: false });
+      if (tail) segments.push({ text: transliterateChunk(tail, dictionary), literal: false });
       break;
     }
 
@@ -179,13 +239,16 @@ export function transliterateSegments(text: string): Segment[] {
     if (close === -1) {
       // Unmatched opening * — transliterate everything (including the *).
       const tail = text.slice(i);
-      if (tail) segments.push({ text: transliterateChunk(tail), literal: false });
+      if (tail) segments.push({ text: transliterateChunk(tail, dictionary), literal: false });
       break;
     }
 
     // Convert text before the opening *
     if (star > i) {
-      segments.push({ text: transliterateChunk(text.slice(i, star)), literal: false });
+      segments.push({
+        text: transliterateChunk(text.slice(i, star), dictionary),
+        literal: false,
+      });
     }
 
     // Literal content between * and * (excluding the stars themselves)
@@ -214,6 +277,6 @@ export function transliterateSegments(text: string): Segment[] {
  * transliterate('unt_san')                     // → 'унтсан'
  * transliterate('Minii mergejil *Programmer*') // → 'Миний мэргэжил Programmer'
  */
-export function transliterate(text: string): string {
-  return transliterateSegments(text).map((s) => s.text).join('');
+export function transliterate(text: string, options: TransliterateOptions = {}): string {
+  return transliterateSegments(text, options).map((s) => s.text).join('');
 }
