@@ -1,6 +1,9 @@
 /**
  * TypeMon — Mongolian Romanization to Cyrillic Transliterator
  *
+ * The tables live in transliterate-rules.json so the Kotlin/Swift ports use
+ * the same data; the expected outputs live in transliterate-fixtures.json.
+ *
  * Key mappings decided by Zaya:
  *   Q → Ө,  W → Ү
  *   J → Ж,  H → Х,  SH → Ш,  CH → Ч,  TS → Ц
@@ -12,60 +15,29 @@
  *   _ between two letters → nothing; it keeps a digraph apart (unt_san → унтсан)
  */
 
+import rules from './transliterate-rules.json' with { type: 'json' };
+
 type Mapping = [string, string];
 
-/**
- * Multi-character mappings — order is critical (longest/most specific first).
- * All cyrillic values are lowercase; casing is applied dynamically.
- */
-const MULTI_CHAR_MAP: Mapping[] = [
-  ['shch', 'щ'],
-  ['sh', 'ш'],
-  ['ch', 'ч'],
-  ['zh', 'ж'],
-  ['ts', 'ц'],
-  ['yu', 'ю'],
-  ['ya', 'я'],
-  ['yo', 'ё'],
-  ['ye', 'е'],
-  ['yi', 'ы'],
-  ['aa', 'аа'],
-  ['ee', 'ээ'],
-  ['oo', 'оо'],
-  ['qq', 'өө'],
-  ['ww', 'үү'],
-  ['ai', 'ай'],
-  ['oi', 'ой'],
-  ['ui', 'уй'],
-  ['wi', 'үй'],
-  ['üi', 'үй'],
-  ['ei', 'эй'],
-  ['ii', 'ий'],
-  ['uu', 'уу'],
-];
+/** Multi-character mappings — ordered, first match wins. Lowercase values. */
+const MULTI_CHAR_MAP: Mapping[] = rules.multi as Mapping[];
 
-/**
- * Single-character mappings.
- * Keys are lowercase latin; values are lowercase cyrillic.
- */
-const SINGLE_CHAR_MAP: Record<string, string> = {
-  a: 'а', b: 'б', v: 'в', g: 'г', d: 'д', e: 'э',
-  j: 'ж', z: 'з', i: 'и', y: 'й', k: 'к', l: 'л',
-  m: 'м', n: 'н', o: 'о', q: 'ө', p: 'п', r: 'р',
-  s: 'с', t: 'т', u: 'у', f: 'ф', h: 'х', w: 'ү',
-  x: 'х', c: 'ц', ö: 'ө', ü: 'ү',
-};
+/** Single-character mappings. Keys are lowercase latin; values lowercase cyrillic. */
+const SINGLE_CHAR_MAP: Record<string, string> = rules.single;
+
+const SOFT_SIGN = rules.softSign;
+const HARD_SIGN = rules.hardSign;
+
+/** Straight apostrophe plus the curly quotes iOS/Android "smart punctuation" substitutes for it. */
+const APOSTROPHES = new Set<string>(rules.apostrophes);
+
+/** Typed between two letters to stop them forming a digraph. Dropped from the output. */
+const SEPARATOR: string = rules.separator;
 
 /** Latin letters the tables understand, in both cases. */
 const LETTER = /[a-zA-ZöüÖÜ]/;
 const LOWER = /[a-zöü]/;
 const UPPER = /[A-ZÖÜ]/;
-
-/** Straight apostrophe plus the curly quotes iOS/Android "smart punctuation" substitutes for it. */
-const APOSTROPHES = new Set(["'", '’', '‘']);
-
-/** Typed between two letters to stop them forming a digraph. Dropped from the output. */
-const SEPARATOR = '_';
 
 const isLatinLetter = (ch: string | undefined): boolean =>
   ch !== undefined && LETTER.test(ch);
@@ -140,10 +112,10 @@ function transliterateChunk(input: string): string {
     // '' → Ъ, ' → Ь (in any mix of straight and curly apostrophes)
     if (APOSTROPHES.has(ch)) {
       if (APOSTROPHES.has(text[i + 1])) {
-        result += wordUpper ? 'Ъ' : 'ъ';
+        result += wordUpper ? HARD_SIGN.toUpperCase() : HARD_SIGN;
         i += 2;
       } else {
-        result += wordUpper ? 'Ь' : 'ь';
+        result += wordUpper ? SOFT_SIGN.toUpperCase() : SOFT_SIGN;
         i++;
       }
       continue;
