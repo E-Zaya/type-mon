@@ -32,6 +32,19 @@
     { "group": "yi", "input": "MONGOLYIN", "expected": "МОНГОЛЫН" },
     { "group": "yi", "input": "yiy", "expected": "ый" },
 
+    { "group": "y-after-consonant", "note": "й never follows a consonant in Mongolian, so a bare y there is ы; after a vowel or at the start it stays й, and ya/yo/yu/ye/yi are matched first.", "input": "ulsyn", "expected": "улсын" },
+    { "group": "y-after-consonant", "input": "mongolyn", "expected": "монголын" },
+    { "group": "y-after-consonant", "input": "Batyn", "expected": "Батын" },
+    { "group": "y-after-consonant", "input": "MONGOLYN", "expected": "МОНГОЛЫН" },
+    { "group": "y-after-consonant", "input": "sayhan", "expected": "сайхан" },
+    { "group": "y-after-consonant", "input": "nyalh", "expected": "нялх" },
+    { "group": "y-after-consonant", "input": "y", "expected": "й" },
+
+    { "group": "kh", "note": "kh is the common Latin spelling of х; кх does not occur in Mongolian.", "input": "Sukhbaatar", "expected": "Сухбаатар" },
+    { "group": "kh", "input": "Batkhaan", "expected": "Батхаан" },
+    { "group": "kh", "input": "KHOVD", "expected": "ХОВД" },
+    { "group": "kh", "input": "batsukh", "expected": "бацух" },
+
     { "group": "umlaut", "input": "Mönh", "expected": "Мөнх" },
     { "group": "umlaut", "input": "önöödör", "expected": "өнөөдөр" },
     { "group": "umlaut", "input": "ügüi", "expected": "үгүй" },

@@ -6,10 +6,10 @@
  *
  * Key mappings decided by Zaya:
  *   Q → Ө,  W → Ү
- *   J → Ж,  H → Х,  SH → Ш,  CH → Ч,  TS → Ц
+ *   J → Ж,  H → Х,  KH → Х,  SH → Ш,  CH → Ч,  TS → Ц
  *   AI → АЙ, OI → ОЙ, UI → УЙ, WI → ҮЙ
  *   AA → АА (long vowels by doubling)
- *   YI → Ы
+ *   YI → Ы,  and Y after a consonant → Ы (ulsyn → улсын; bayar → баяр)
  *   Ö → Ө, Ü → Ү      (for people used to the MNS 5217 romanization)
  *   ' → Ь,  '' → Ъ   (the curly ’ ‘ that phones insert count as ')
  *   _ between two letters → nothing; it keeps a digraph apart (unt_san → унтсан)
@@ -59,6 +59,10 @@ const MULTI_CHAR_MAP: Mapping[] = rules.multi as Mapping[];
 
 /** Single-character mappings. Keys are lowercase latin; values lowercase cyrillic. */
 const SINGLE_CHAR_MAP: Record<string, string> = rules.single;
+
+/** Letters that read differently right after a consonant (y → ы). */
+const AFTER_CONSONANT: Record<string, string> = rules.afterConsonant;
+const CONSONANTS = new Set<string>(rules.consonants);
 
 const SOFT_SIGN = rules.softSign;
 const HARD_SIGN = rules.hardSign;
@@ -205,7 +209,11 @@ function transliterateChunk(input: string, lookup: Lookup): string {
     }
 
     if (!matched) {
-      const cyr = SINGLE_CHAR_MAP[lower[i]];
+      const contextual = AFTER_CONSONANT[lower[i]];
+      const cyr =
+        contextual !== undefined && i > 0 && CONSONANTS.has(lower[i - 1])
+          ? contextual
+          : SINGLE_CHAR_MAP[lower[i]];
       result += cyr ? applyCase(cyr, ch) : ch;
       i++;
     }

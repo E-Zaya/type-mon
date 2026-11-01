@@ -1,10 +1,11 @@
 {
-  "$comment": "TypeMon romanization rules. Shared by every implementation (TS today, Kotlin/Swift later). Lowercase only; casing is applied by the engine. `multi` is ordered: the first match wins, so longer and more specific entries come first.",
+  "$comment": "TypeMon romanization rules. Shared by every implementation (TS today, Kotlin/Swift later). Lowercase only; casing is applied by the engine. `multi` is ordered: the first match wins, so longer and more specific entries come first. `afterConsonant` applies to a single letter that follows one of `consonants` in the same word, before `single` (ulsyn → улсын, but y → й elsewhere).",
   "multi": [
     ["shch", "щ"],
     ["sh", "ш"],
     ["ch", "ч"],
     ["zh", "ж"],
+    ["kh", "х"],
     ["ts", "ц"],
     ["yu", "ю"],
     ["ya", "я"],
@@ -32,6 +33,8 @@
     "s": "с", "t": "т", "u": "у", "f": "ф", "h": "х", "w": "ү",
     "x": "х", "c": "ц", "ö": "ө", "ü": "ү"
   },
+  "consonants": "bcdfghjklmnprstvxz",
+  "afterConsonant": { "y": "ы" },
   "softSign": "ь",
   "hardSign": "ъ",
   "apostrophes": ["'", "’", "‘"],
