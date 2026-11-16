@@ -6,6 +6,18 @@
     { "group": "readme", "input": "gov'", "expected": "говь" },
     { "group": "readme", "input": "Minii mergejil *Programmer*", "expected": "Миний мэргэжил Programmer" },
 
+    { "group": "vowel-i", "input": "qi", "expected": "өй" },
+    { "group": "vowel-i", "input": "Qi", "expected": "Өй" },
+    { "group": "vowel-i", "input": "öi", "expected": "өй" },
+    { "group": "vowel-i", "input": "tqi", "expected": "төй" },
+    { "group": "vowel-i", "input": "yai", "expected": "яй" },
+    { "group": "vowel-i", "input": "yoi", "expected": "ёй" },
+    { "group": "vowel-i", "input": "yui", "expected": "юй" },
+    { "group": "vowel-i", "input": "yei", "expected": "ей" },
+    { "group": "vowel-i", "input": "nohoi", "expected": "нохой" },
+    { "group": "vowel-i", "input": "yavaarai", "expected": "яваарай" },
+    { "group": "vowel-i", "input": "minii", "expected": "миний" },
+
     { "group": "digraphs", "input": "bayarlalaa", "expected": "баярлалаа" },
     { "group": "digraphs", "input": "yaagaad", "expected": "яагаад" },
     { "group": "digraphs", "input": "qnqqdqr", "expected": "өнөөдөр" },

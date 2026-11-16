@@ -1,7 +1,11 @@
 {
-  "$comment": "TypeMon romanization rules. Shared by every implementation (TS today, Kotlin/Swift later). Lowercase only; casing is applied by the engine. `multi` is ordered: the first match wins, so longer and more specific entries come first. `afterConsonant` applies to a single letter that follows one of `consonants` in the same word, before `single` (ulsyn → улсын, but y → й elsewhere).",
+  "$comment": "TypeMon romanization rules. Shared by every implementation (TS today, Kotlin/Swift later). Lowercase only; casing is applied by the engine. `multi` is ordered: the first match wins, so longer and more specific entries come first. An i right after a single vowel is й, never и (oi → ой, qi → өй, yai → яй); ii is ий, and after a long vowel it stays и (aai → ааи). `afterConsonant` applies to a single letter that follows one of `consonants` in the same word, before `single` (ulsyn → улсын, but y → й elsewhere).",
   "multi": [
     ["shch", "щ"],
+    ["yai", "яй"],
+    ["yoi", "ёй"],
+    ["yui", "юй"],
+    ["yei", "ей"],
     ["sh", "ш"],
     ["ch", "ч"],
     ["zh", "ж"],
@@ -20,6 +24,8 @@
     ["ai", "ай"],
     ["oi", "ой"],
     ["ui", "уй"],
+    ["qi", "өй"],
+    ["öi", "өй"],
     ["wi", "үй"],
     ["üi", "үй"],
     ["ei", "эй"],
