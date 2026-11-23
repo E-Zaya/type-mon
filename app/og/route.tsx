@@ -9,7 +9,9 @@ export const revalidate = 86400;
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
 
-export async function GET() {
+export async function GET(request: Request) {
+  const icon = new URL("/icon-192.png", request.url).toString();
+
   return new ImageResponse(
     (
       <div
@@ -70,8 +72,11 @@ export async function GET() {
               color: "#ffffff",
               fontWeight: 400,
               display: "flex",
+              alignItems: "center",
             }}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={icon} width={64} height={64} alt="" style={{ marginRight: "20px" }} />
             <span>Type</span>
             <span style={{ color: "#1D9E75" }}>Mon</span>
           </div>
