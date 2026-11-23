@@ -6,10 +6,10 @@ const CORE_CACHE_URLS = [
   "/",
   "/manifest.webmanifest",
   "/favicon.ico",
-  "/icon",
-  "/apple-icon",
-  "/icon-192",
-  "/icon-512",
+  "/icon.png",
+  "/apple-icon.png",
+  "/icon-192.png",
+  "/icon-512.png",
 ];
 
 function collectCurrentPageAssets(): string[] {
