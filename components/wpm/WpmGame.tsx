@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
+import { track } from "@vercel/analytics";
 import TypingTest from "@/components/wpm/TypingTest";
 import ResultCard from "@/components/wpm/ResultCard";
 import { MODES, type WpmMode } from "@/lib/wpm-words";
@@ -66,6 +67,8 @@ export default function WpmGame() {
 
   const onFinish = useCallback((r: WpmResult) => {
     setResult(r);
+    // Numbers only, no text: enough to see which mode people play and how fast.
+    track("wpm_finish", { mode: r.mode, wpm: r.wpm, accuracy: r.accuracy });
     const current = parseBest(readBestRaw());
     const previous = current[r.mode] ?? 0;
     if (r.wpm > previous) {

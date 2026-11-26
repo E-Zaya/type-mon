@@ -1,0 +1,15 @@
+{
+  "$comment": "Words whose plain Latin spelling (no _) is read wrong by the digraph rules, mostly т+с and с+х. Keys are lowercase Latin as a user types them; values lowercase Cyrillic. A key also matches as a prefix (batswh → батсүх, batswhiin → батсүхийн), so a key must end in a consonant that no multi-letter rule starts with (never i/a/e/o/u/s/t/c/z/y/w/q): write the stem, batswwr not batswwri. Add a line, then run npm test: the exceptions test checks that each entry is needed, works, and ends safely.",
+  "words": {
+    "untsan": "унтсан",
+    "martsan": "мартсан",
+    "hatsan": "хатсан",
+    "eshwl": "эсхүл",
+    "batsaihan": "батсайхан",
+    "batswh": "батсүх",
+    "batswren": "батсүрэн",
+    "batswwr": "батсүүр",
+    "batsetseg": "батцэцэг",
+    "tsogtsaihan": "цогтсайхан"
+  }
+}
