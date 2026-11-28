@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 // 全アプリ共通の受け口 (ezaya.dev)。届け先はそちらの設定で決まる
-const ENDPOINT = "https://ezaya.dev/api/feedback";
+// ezaya.dev は www へ転送する。転送があると別ドメインからの送信をブラウザが止めるので、最初から www へ
+const ENDPOINT = "https://www.ezaya.dev/api/feedback";
 const MESSAGE_MAX = 2000;
 
 type Kind = "bug" | "idea" | "love";
