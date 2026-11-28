@@ -93,6 +93,17 @@ export default function TypeMonEditor({
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [feedbackFirst, setFeedbackFirst] = useState(false);
+
+  // フッターの「Санал хүсэлт」から、設定を Feedback の位置で開く
+  useEffect(() => {
+    const open = () => {
+      setFeedbackFirst(true);
+      setSettingsOpen(true);
+    };
+    window.addEventListener("typemon:feedback", open);
+    return () => window.removeEventListener("typemon:feedback", open);
+  }, []);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   // Platform never changes, so a store with no updates is enough; the server
@@ -581,7 +592,14 @@ export default function TypeMonEditor({
       />
 
       {/* Settings modal */}
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        feedbackFirst={feedbackFirst}
+        onClose={() => {
+          setSettingsOpen(false);
+          setFeedbackFirst(false);
+        }}
+      />
     </div>
   );
 }
