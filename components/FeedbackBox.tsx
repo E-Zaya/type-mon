@@ -3,22 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 // 全アプリ共通の受け口 (ezaya.dev)。届け先はそちらの設定で決まる
-// ezaya.dev と www.ezaya.dev の片方が転送になっていると、別ドメインからの送信は
-// 転送のところでブラウザが止める (送信前の確認は転送をたどれない)。止まったらもう片方へ送る
-const ENDPOINTS = ["https://ezaya.dev/api/feedback", "https://www.ezaya.dev/api/feedback"];
-
-async function postFeedback(body: string): Promise<Response> {
-  let failure: unknown;
-  for (const url of ENDPOINTS) {
-    try {
-      return await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
-    } catch (error) {
-      failure = error;
-    }
-  }
-  throw failure;
-}
-
+// ezaya.dev は www へ転送する。転送があると別ドメインからの送信をブラウザが止めるので、最初から www へ
+const ENDPOINT = "https://www.ezaya.dev/api/feedback";
 const MESSAGE_MAX = 2000;
 
 type Kind = "bug" | "idea" | "love";
@@ -50,8 +36,10 @@ export default function FeedbackBox() {
     setState("sending");
     setError("");
     try {
-      const res = await postFeedback(
-        JSON.stringify({
+      const res = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           app: "typemon-web",
           kind,
           message,
@@ -62,7 +50,7 @@ export default function FeedbackBox() {
           locale: navigator.language,
           elapsedMs: Date.now() - openedAt.current,
         }),
-      );
+      });
       if (res.status === 429) {
         setError("Дараалан илгээсэн тул түр хүлээгээд дахин оролдоно уу.");
         setState("error");
