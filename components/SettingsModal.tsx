@@ -4,10 +4,13 @@ import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import FeedbackBox from "@/components/FeedbackBox";
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  /** true なら開いた直後に Feedback の欄へ移って入力できる状態にする */
+  feedbackFirst?: boolean;
 };
 
 /**
@@ -68,7 +71,7 @@ const SPECIAL: Array<[string, string]> = [
   ["ei", "эй"],
 ];
 
-export default function SettingsModal({ open, onClose }: Props) {
+export default function SettingsModal({ open, onClose, feedbackFirst = false }: Props) {
   const mounted = useClientMounted();
   const titleId = useId();
   const sheetRef = useRef<HTMLElement | null>(null);
@@ -139,7 +142,13 @@ export default function SettingsModal({ open, onClose }: Props) {
     body.style.overflow = "hidden";
 
     requestAnimationFrame(() => {
-      closeButtonRef.current?.focus();
+      const feedback = feedbackFirst ? sheetRef.current?.querySelector<HTMLElement>("#feedback") : null;
+      if (feedback) {
+        feedback.scrollIntoView({ block: "start" });
+        feedback.querySelector<HTMLTextAreaElement>("textarea")?.focus({ preventScroll: true });
+      } else {
+        closeButtonRef.current?.focus();
+      }
     });
 
     return () => {
@@ -155,6 +164,8 @@ export default function SettingsModal({ open, onClose }: Props) {
         returnFocusRef.current = null;
       });
     };
+    // feedbackFirst は開く瞬間の値だけ使う
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   if (!mounted) return null;
@@ -339,6 +350,19 @@ export default function SettingsModal({ open, onClose }: Props) {
                   <ShortcutRow keys={["Ctrl/⌘", ","]} desc="Open settings" />
                   <ShortcutRow keys={["Esc"]} desc="Close settings" />
                 </div>
+              </section>
+
+              {/* Feedback */}
+              <section
+                id="feedback"
+                className="
+                  border-t border-black/10 dark:border-white/10 pt-5
+                "
+              >
+                <h3 className="text-[11px] text-black/60 dark:text-white/60 uppercase tracking-widest mb-3">
+                  Санал хүсэлт
+                </h3>
+                <FeedbackBox />
               </section>
             </div>
           </motion.section>

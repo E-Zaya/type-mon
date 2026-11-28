@@ -121,6 +121,14 @@ function HomeInner() {
           >
             Zaya
           </a>
+          {" · "}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("typemon:feedback"))}
+            className="text-black/70 hover:text-[#1D9E75] dark:text-white/70 dark:hover:text-[#1D9E75] transition-colors duration-150"
+          >
+            Санал хүсэлт
+          </button>
         </footer>
       </div>
     </main>
